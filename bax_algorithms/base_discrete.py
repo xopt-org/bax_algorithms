@@ -1,5 +1,5 @@
-from abc import ABC
-from collections.abc import Callable
+from abc import ABC, abstractmethod
+from typing import Callable, Tuple
 from pydantic import Field
 import torch
 from torch import Tensor
@@ -7,9 +7,20 @@ from torch import Tensor
 from botorch.models.model import Model, ModelList
 from xopt.generators.bayesian.bax.algorithms import Algorithm
 
+class BaseDiscreteAlgoFn(ABC):
+    @abstractmethod
+    def __call__(self, posterior_samples: Tensor, x_grid: Tensor, **algo_kwargs) -> Tuple[Tensor, Tensor]:
+        pass
+
+class FunctionWrapper(BaseDiscreteAlgoFn):
+    def __init__(self, fn: Callable[[Tensor, Tensor], Tuple[Tensor, Tensor]]):
+        self.fn = fn
+
+    def __call__(self, posterior_samples: Tensor, x_grid: Tensor, **algo_kwargs) -> Tuple[Tensor, Tensor]:
+        return self.fn(posterior_samples, x_grid, **algo_kwargs)
     
 class DiscreteSubsetAlgorithm(Algorithm, ABC):
-    algo_fn: Callable = Field(None,
+    algo_fn: Callable[[Tensor, Tensor], Tuple[Tensor, Tensor]] = Field(None,
                               description="Python function defining a BAX algorithm on a discrete grid")
     grid: Tensor = Field(None,
                          description="n-d grid of discrete points")
@@ -17,7 +28,7 @@ class DiscreteSubsetAlgorithm(Algorithm, ABC):
         description="keys designating output properties")
     algo_kwargs: dict = Field({},
         description="keyword args for generic subset algorithm")
-
+        
     def get_execution_paths(self, model: Model, bounds: Tensor):
         test_points = self.grid
         
@@ -30,11 +41,12 @@ class DiscreteSubsetAlgorithm(Algorithm, ABC):
         posterior_samples = self.evaluate_virtual_objective(
             model, test_points, bounds, self.n_samples
         )
+        
+        # wrap if needed
+        if not isinstance(self.algo_fn, BaseDiscreteAlgoFn):
+            self.algo_fn = FunctionWrapper(self.algo_fn)
 
-        y_opt, opt_idx = self.algo_fn(posterior_samples)
-        x_opt = test_points[opt_idx[1]]
-        #opt_idx = opt_idx.squeeze(dim=[-1])
-        #x_opt = test_points[opt_idx]
+        x_opt, y_opt = self.algo_fn(posterior_samples, test_points, **self.algo_kwargs)
 
         # get the solution_center and solution_entropy for Turbo
         # note: the entropy calc here drops a constant scaling factor

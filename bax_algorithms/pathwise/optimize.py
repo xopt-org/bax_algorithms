@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from torch import Tensor
 from xopt.pydantic import XoptBaseModel
+from pydantic import Field 
 
 class VirtualOptimizer(XoptBaseModel, ABC):
     minimize: bool = Field(True,
@@ -33,7 +34,7 @@ class VirtualOptimizer(XoptBaseModel, ABC):
         '''
         Multiply virtual objective by -1 if not in minimization mode (to maximize instead).
         '''
-        wrapped_virtual_objective = wrap_virtual_objective(virtual_objective,
+        wrapped_virtual_objective = self.wrap_virtual_objective(virtual_objective,
                                                            sample_functions_list,
                                                            bounds)
         def target_function(x):

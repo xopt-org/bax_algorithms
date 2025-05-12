@@ -1,8 +1,13 @@
 # to be added to basic algorithms in Xopt
-
+from typing import List
 from abc import ABC, abstractmethod
 from bax_algorithms.pathwise.optimize import VirtualOptimizer, DifferentialEvolution
 from botorch.models.model import Model, ModelList
+
+from xopt.generators.bayesian.bax.algorithms import Algorithm
+
+from pydantic import Field
+from torch import Tensor
 
 class PathwiseOptimization(Algorithm, ABC):
     """
