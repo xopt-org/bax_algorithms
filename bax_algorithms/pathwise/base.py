@@ -60,7 +60,7 @@ class PathwiseOptimization(Algorithm, ABC):
         sample_functions_list = self.draw_sample_functions_list(model)
         self.results['sample_functions_list'] = sample_functions_list
 
-        optimization_indeces = self._get_optimization_indeces()
+        optimization_indeces = self._get_optimization_indeces(bounds)
 
         # optimize sample functions
         best_x = self.optimizer.optimize(virtual_objective = self.evaluate_virtual_objective,
@@ -89,11 +89,11 @@ class PathwiseOptimization(Algorithm, ABC):
         sample_funcs_list = [draw_matheron_paths(m, sample_shape=torch.Size([self.n_samples])) for m in model.models]
         return sample_funcs_list
 
-    def _get_optimization_indeces(self) -> Tensor:
+    def _get_optimization_indeces(self, bounds) -> Tensor:
         '''
         Get indeces specifying parameters for virtual objective optimization.
         '''
-        return None
+        return torch.tensor(range(bounds.shape[1]))
 
     def evaluate_virtual_observables(
         self,
