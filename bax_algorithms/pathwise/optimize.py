@@ -2,6 +2,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from torch import Tensor
 from xopt.pydantic import XoptBaseModel
+from pydantic import Field
+import torch
+import numpy as np
 
 class VirtualOptimizer(XoptBaseModel, ABC):
     minimize: bool = Field(True,
@@ -11,31 +14,48 @@ class VirtualOptimizer(XoptBaseModel, ABC):
     def optimize(self,
                  virtual_objective: Callable,
                  sample_functions_list: list[Callable],
-                 xopt_bounds: Tensor,
-                 virtual_optimization_bounds: Tensor) -> Tensor:
+                 bounds: Tensor,
+                 n_samples: int,
+                 optimization_indeces: Tensor = None,
+                ) -> Tensor:
         '''
         Minimizes virtual objective sample functions and returns optimal inputs.
         '''
 
     @abstractmethod
-    def wrap_virtual_objective(self,
+    def _wrap_virtual_objective(self,
                            virtual_objective: Callable, 
                            sample_functions_list: list[Callable], 
-                           bounds: Tensor) -> Callable:
+                           bounds: Tensor,
+                           n_samples: int,
+                           optimization_indeces: Tensor,
+                               ) -> Callable:
         '''
         Wraps virtual objective function so inputs/outputs are suitable for optimization method.
         '''
 
-    def get_target_function(self,
+    @abstractmethod
+    def _get_virtual_optimization_bounds(self, bounds: Tensor, n_samples: int, optimization_indeces: Tensor) -> Tensor:
+        '''
+        Get bounds for virtual optimization (may not be the same as bounds passed to optimizer).
+        '''
+
+    def _get_target_function(self,
                            virtual_objective: Callable, 
                            sample_functions_list: list[Callable], 
-                           bounds: Tensor) -> Callable:
+                           bounds: Tensor,
+                           n_samples: int,
+                           optimization_indeces: Tensor,
+                            ) -> Callable:
         '''
         Multiply virtual objective by -1 if not in minimization mode (to maximize instead).
         '''
-        wrapped_virtual_objective = wrap_virtual_objective(virtual_objective,
+        wrapped_virtual_objective = self._wrap_virtual_objective(virtual_objective,
                                                            sample_functions_list,
-                                                           bounds)
+                                                           bounds,
+                                                           n_samples,
+                                                           optimization_indeces,
+                                                                )
         def target_function(x):
             if not self.minimize:
                 return -1. * wrapped_virtual_objective(x)
@@ -43,12 +63,12 @@ class VirtualOptimizer(XoptBaseModel, ABC):
                 return wrapped_virtual_objective(x)
 
         return target_function
-            
+
 from scipy.optimize import differential_evolution
 class DifferentialEvolution(VirtualOptimizer):
     popsize: int = Field(15,
         description="Number of points sampled in each generation of evolutionary algorithm.")
-    maxiter: int = Field(10,
+    maxiter: int = Field(100,
         description="Max number of generations in the evolutionary algorithm.")
     polish: bool = Field(False,
         description="Whether to use gradient-based optimization after evolution to further optimize result.")
@@ -56,33 +76,63 @@ class DifferentialEvolution(VirtualOptimizer):
     def optimize(self,
                  virtual_objective: Callable, 
                  sample_functions_list: list[Callable],
-                 xopt_bounds: Tensor,
-                 virtual_optimization_bounds: Tensor) -> Tensor:
+                 bounds: Tensor,
+                 n_samples: int,
+                 optimization_indeces: Tensor = None,
+                ) -> Tensor:
 
-        target_function = self.get_target_function(virtual_objective,
+        target_function = self._get_target_function(virtual_objective,
                                                     sample_functions_list,
-                                                    xopt_bounds)
+                                                    bounds,
+                                                    n_samples,
+                                                    optimization_indeces)
+
+        de_bounds = self._get_virtual_optimization_bounds(bounds, n_samples, optimization_indeces)
 
         res = differential_evolution(target_function, 
-                                     bounds=virtual_optimization_bounds.numpy(), 
+                                     bounds=de_bounds, 
                                      vectorized=True, 
                                      polish=self.polish, 
                                      popsize=self.popsize, 
                                      maxiter=self.maxiter, 
                                      seed=1)
-        
-        best_x = torch.from_numpy(res.x)
-        
+        if optimization_indeces is not None:
+            ndim = len(optimization_indeces)
+        else:
+            ndim = bounds.shape[-1]
+        best_x = torch.from_numpy(res.x).reshape(n_samples, 1, ndim)
+
         return best_x
         
-    def wrap_virtual_objective(self,
+    def _wrap_virtual_objective(self,
                                virtual_objective: Callable, 
                                sample_functions_list: list[Callable], 
-                               bounds: Tensor) -> Callable:
+                               bounds: Tensor,
+                               n_samples: int,
+                               optimization_indeces: Tensor,
+                               ) -> Callable:
 
         def wrapped_virtual_objective(x):
             x = torch.from_numpy(x)
-            res = virtual_objective(sample_funcs_list, x.T.unsqueeze(0), bounds)
-            return res[0,:].numpy()
+            # x.shape = num_params x popsize*num_params // num_params = dim*n_samples
+            dim = int(x.shape[0]/n_samples)
+            x = x.reshape(n_samples,dim,-1)
+            x = torch.swapaxes(x,1,2)
+            if optimization_indeces is not None:
+                x_p = bounds.mean(dim=0).repeat(*x.shape[:-1],1)
+                x_p[...,optimization_indeces] = x
+            else:
+                x_p = x
+            res = virtual_objective(sample_functions_list, x_p, bounds)
+            return res.sum(dim=0).detach().numpy()
 
         return wrapped_virtual_objective
+
+    def _get_virtual_optimization_bounds(self, bounds: Tensor, n_samples: int, optimization_indeces: Tensor) -> Tensor:
+        '''
+        Get bounds for virtual optimization (may not be the same as bounds passed to optimizer).
+        '''
+        if optimization_indeces is not None:
+            return np.tile(bounds[...,optimization_indeces].numpy().T, (n_samples,1))
+        else:
+            return np.tile(bounds.numpy().T, (n_samples,1))
