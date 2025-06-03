@@ -5,10 +5,15 @@ from xopt.pydantic import XoptBaseModel
 from pydantic import Field
 import torch
 import numpy as np
+import time
+
 
 class VirtualOptimizer(XoptBaseModel, ABC):
     minimize: bool = Field(True,
         description = "Whether to minimize (True) or maximize (False) the virtual objective")
+    verbose: bool = Field(False,
+        description="Whether to print diagnostics during optimization.")
+
 
     @abstractmethod
     def optimize(self,
@@ -73,6 +78,7 @@ class DifferentialEvolution(VirtualOptimizer):
     polish: bool = Field(False,
         description="Whether to use gradient-based optimization after evolution to further optimize result.")
 
+
     def optimize(self,
                  virtual_objective: Callable, 
                  sample_functions_list: list[Callable],
@@ -89,6 +95,7 @@ class DifferentialEvolution(VirtualOptimizer):
 
         de_bounds = self._get_virtual_optimization_bounds(bounds, n_samples, optimization_indeces)
 
+        start = time.time()
         res = differential_evolution(target_function, 
                                      bounds=de_bounds, 
                                      vectorized=True, 
@@ -96,10 +103,14 @@ class DifferentialEvolution(VirtualOptimizer):
                                      popsize=self.popsize, 
                                      maxiter=self.maxiter, 
                                      seed=1)
+        if self.verbose:
+            print('Sample optimization took:', time.time()-start, 'seconds.')
+
         if optimization_indeces is not None:
             ndim = len(optimization_indeces)
         else:
             ndim = bounds.shape[-1]
+
         best_x = torch.from_numpy(res.x).reshape(n_samples, 1, ndim)
 
         return best_x
@@ -124,7 +135,8 @@ class DifferentialEvolution(VirtualOptimizer):
             else:
                 x_p = x
             res = virtual_objective(sample_functions_list, x_p, bounds)
-            return res.sum(dim=0).detach().numpy()
+            res = res.sum(dim=0).detach().numpy()
+            return res
 
         return wrapped_virtual_objective
 

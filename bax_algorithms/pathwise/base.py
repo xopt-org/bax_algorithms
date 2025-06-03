@@ -1,6 +1,6 @@
 # to be added to basic algorithms in Xopt
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from bax_algorithms.pathwise.optimize import VirtualOptimizer, DifferentialEvolution
 from botorch.models.model import Model, ModelList
 from botorch.sampling.pathwise.posterior_samplers import draw_matheron_paths
@@ -11,7 +11,7 @@ import torch
 from typing import List
 
 
-class PathwiseOptimization(Algorithm, ABC):
+class PathwiseOptimization(Algorithm):
     """
     Base algorithm for BAX pathwise function sample minimization.
 
@@ -47,8 +47,10 @@ class PathwiseOptimization(Algorithm, ABC):
     )
     observable_names_ordered: List[str] = Field(
         default=None,
-        description="names of observable/objective models used in this algorithm",
+        description="names of observable models used in this algorithm",
     )
+
+
     def execute_algorithm(self, model: Model, bounds: Tensor) -> Tensor:
         '''
         Run virtual algorithm on pathwise function samples.
@@ -105,11 +107,12 @@ class PathwiseOptimization(Algorithm, ABC):
         Evaluate observable models. model must either be a ModelList (GP) or a list of callable function samples.
         '''
         if isinstance(model, ModelList):
-            assert len(x.shape)==2
+            assert len(x.shape) == 2
             p = model.posterior(x)
-            vobs = p.sample(torch.Size([n_samples]))
+            vobs = p.sample(torch.Size([n_samples])) # vobs has shape (n_samples, x.shape[-2], num_outputs)
         else:
             assert n_samples is None
+            assert len(x.shape) in [2,3]
             vobs_list = [sample_funcs(x) for sample_funcs in model]
-            vobs = torch.stack(vobs_list, dim=-1)
+            vobs = torch.stack(vobs_list, dim=-1) # vobs has shape (n_samples, x.shape[-2], num_outputs)
         return vobs
