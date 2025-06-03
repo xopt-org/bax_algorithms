@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import List
 from collections.abc import Callable
 from torch import Tensor
 from xopt.pydantic import XoptBaseModel
@@ -18,7 +19,7 @@ class VirtualOptimizer(XoptBaseModel, ABC):
     @abstractmethod
     def optimize(self,
                  virtual_objective: Callable,
-                 sample_functions_list: list[Callable],
+                 sample_functions_list: List[Callable],
                  bounds: Tensor,
                  n_samples: int,
                  optimization_indeces: Tensor = None,
@@ -81,7 +82,7 @@ class DifferentialEvolution(VirtualOptimizer):
 
     def optimize(self,
                  virtual_objective: Callable, 
-                 sample_functions_list: list[Callable],
+                 sample_functions_list: List[Callable],
                  bounds: Tensor,
                  n_samples: int,
                  optimization_indeces: Tensor = None,
@@ -95,7 +96,9 @@ class DifferentialEvolution(VirtualOptimizer):
 
         de_bounds = self._get_virtual_optimization_bounds(bounds, n_samples, optimization_indeces)
 
-        start = time.time()
+        if self.verbose:
+            start = time.time()
+            print('Beginning sample optimization.')
         res = differential_evolution(target_function, 
                                      bounds=de_bounds, 
                                      vectorized=True, 
@@ -117,7 +120,7 @@ class DifferentialEvolution(VirtualOptimizer):
         
     def _wrap_virtual_objective(self,
                                virtual_objective: Callable, 
-                               sample_functions_list: list[Callable], 
+                               sample_functions_list: List[Callable], 
                                bounds: Tensor,
                                n_samples: int,
                                optimization_indeces: Tensor,

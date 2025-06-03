@@ -117,8 +117,6 @@ class EmittanceAlgorithm(Algorithm):
                                                      tkwargs, 
                                                      n_samples,
                                                       )
-        self.results["emit"] = emit
-        self.results["bmag"] = bmag
         
         if self.x_key and self.y_key:
             res = (emit[...,0] * emit[...,1]).sqrt()
@@ -146,7 +144,7 @@ class EmittanceAlgorithm(Algorithm):
         tkwargs = tkwargs if tkwargs else {"dtype": torch.double, "device": "cpu"}
         
         x = self.get_meas_scan_inputs(x_tuning, bounds, tkwargs) # result shape n_tuning_configs*n_steps x ndim
-        bss = self.evaluate_virtual_observables(model, x) 
+        bss = self.evaluate_virtual_observables(model, x, n_samples) 
         bss = bss.reshape(-1, x_tuning.shape[-2], self.n_steps_measurement_param, bss.shape[-1])
         # bss.shape = (n_samples, x_tuning.shape[-2], self.n_steps_measurement_param, 1 or 2)
         x = x.reshape(-1, x_tuning.shape[-2], self.n_steps_measurement_param, x.shape[-1])
@@ -209,8 +207,14 @@ class PathwiseMinimizeEmittance(EmittanceAlgorithm, PathwiseOptimization):
         best_inputs = self.execute_algorithm(sample_functions_list, bounds)
         best_meas_scan_inputs = self.get_meas_scan_inputs(best_inputs, bounds)
         best_meas_scan_outputs = torch.vstack([sample_func(best_meas_scan_inputs) for sample_func in sample_functions_list]).T.unsqueeze(0)
+        best_emit, best_bmag = self.evaluate_posterior_emittance(sample_functions_list,
+                                                                      best_inputs,
+                                                                      bounds
+                                                                     )
         self.results = {}
         self.results['best_inputs'] = best_inputs
+        self.results['best_emit'] = best_emit
+        self.results['best_bmag'] = best_bmag
         self.results['sample_functions_list'] = sample_functions_list
 
         return best_meas_scan_inputs, best_meas_scan_outputs, {}
