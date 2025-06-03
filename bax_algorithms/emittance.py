@@ -203,12 +203,17 @@ class EmittanceAlgorithm(Algorithm):
 class PathwiseMinimizeEmittance(EmittanceAlgorithm, PathwiseOptimization):
 
     def get_execution_paths(self, model: Model, bounds: Tensor) -> Tensor:
+        # draw callable sample functions
+        sample_functions_list = self.draw_sample_functions_list(model)
 
-        best_x = self.execute_algorithm(model, bounds)
-        best_meas_scan_x = self.get_meas_scan_inputs(best_x, bounds)
-        best_meas_scan_y = torch.vstack([sample_func(best_meas_scan_x) for sample_func in self.results['sample_functions_list']]).T.unsqueeze(0)
-        self.results['best_x'] = best_x
-        return best_meas_scan_x, best_meas_scan_y, {}
+        best_inputs = self.execute_algorithm(sample_functions_list, bounds)
+        best_meas_scan_inputs = self.get_meas_scan_inputs(best_inputs, bounds)
+        best_meas_scan_outputs = torch.vstack([sample_func(best_meas_scan_inputs) for sample_func in sample_functions_list]).T.unsqueeze(0)
+        self.results = {}
+        self.results['best_inputs'] = best_inputs
+        self.results['sample_functions_list'] = sample_functions_list
+
+        return best_meas_scan_inputs, best_meas_scan_outputs, {}
 
     def draw_sample_functions_list(self, model):
         sample_funcs_list = []

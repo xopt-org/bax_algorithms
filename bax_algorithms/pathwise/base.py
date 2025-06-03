@@ -9,6 +9,7 @@ from xopt.generators.bayesian.bax.algorithms import Algorithm
 from torch import Tensor
 import torch
 from typing import List
+from collections.abc import Callable
 
 
 class PathwiseOptimization(Algorithm):
@@ -51,37 +52,39 @@ class PathwiseOptimization(Algorithm):
     )
 
 
-    def execute_algorithm(self, model: Model, bounds: Tensor) -> Tensor:
+    def execute_algorithm(self, sample_functions_list: List[Callable], bounds: Tensor) -> Tensor:
         '''
         Run virtual algorithm on pathwise function samples.
         '''
 
-        self.results = {}
-
-        # draw callable sample functions
-        sample_functions_list = self.draw_sample_functions_list(model)
-        self.results['sample_functions_list'] = sample_functions_list
-
         optimization_indeces = self._get_optimization_indeces(bounds)
 
         # optimize sample functions
-        best_x = self.optimizer.optimize(virtual_objective = self.evaluate_virtual_objective,
+        best_inputs = self.optimizer.optimize(virtual_objective = self.evaluate_virtual_objective,
                                               sample_functions_list = sample_functions_list,
                                               bounds = bounds,
                                               optimization_indeces = optimization_indeces,
                                               n_samples = self.n_samples)
 
-        return best_x
+        return best_inputs
 
     def get_execution_paths(self, model: Model, bounds: Tensor) -> Tensor:
         '''
         Execute algorithm and get execution paths from optimization result.
         '''
-        best_x = self.execute_algorithm(model, bounds)
-        best_y = self.evaluate_virtual_objective(self.results['sample_functions_list'], best_x, bounds)
-        self.results['best_x'] = best_x
-        self.results['best_y'] = best_y
-        return self.results['best_x'], self.results['best_y'], self.results      
+        
+        # draw callable sample functions
+        sample_functions_list = self.draw_sample_functions_list(model)
+
+        best_inputs = self.execute_algorithm(sample_functions_list, bounds)
+        best_objective = self.evaluate_virtual_objective(sample_functions_list, best_inputs, bounds)
+        
+        self.results = {}
+        self.results['best_inputs'] = best_inputs
+        self.results['best_objective'] = best_objective
+        self.results['sample_functions_list'] = sample_functions_list
+
+        return best_inputs, best_objective, self.results      
 
     def draw_sample_functions_list(self, model: Model) -> List:
         '''
@@ -107,12 +110,13 @@ class PathwiseOptimization(Algorithm):
         Evaluate observable models. model must either be a ModelList (GP) or a list of callable function samples.
         '''
         if isinstance(model, ModelList):
-            assert len(x.shape) == 2
+            assert len(x.shape) == 2 # x.shape should equal (n_points, ndim)
             p = model.posterior(x)
-            vobs = p.sample(torch.Size([n_samples])) # vobs has shape (n_samples, x.shape[-2], num_outputs)
+            vobs = p.sample(torch.Size([n_samples])) # vobs.shape will be (n_samples, n_points, num_outputs)
         else:
             assert n_samples is None
-            assert len(x.shape) in [2,3]
+            assert len(x.shape) in [2,3] # x.shape can be (n_samples, n_points, ndim) for samplewise evaluation
+                                         # or (n_points, ndim) for broadcasting to all samples
             vobs_list = [sample_funcs(x) for sample_funcs in model]
-            vobs = torch.stack(vobs_list, dim=-1) # vobs has shape (n_samples, x.shape[-2], num_outputs)
+            vobs = torch.stack(vobs_list, dim=-1) # vobs.shape will be (n_samples, n_points, num_outputs)
         return vobs
