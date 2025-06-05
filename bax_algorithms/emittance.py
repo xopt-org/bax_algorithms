@@ -122,7 +122,7 @@ class EmittanceAlgorithm(Algorithm):
             res = (emit[...,0] * emit[...,1]).sqrt()
             if self.use_bmag:
                 bmag_mean = (bmag[...,0] * bmag[...,1]).sqrt()
-                bmag_min, bmag_min_id = torch.min(bmag_mean, dim=-1)
+                bmag_min, bmag_min_id = torch.min(bmag_mean, dim=-1, keepdim=True)
                 res = bmag_min * res
         else:
             res = emit
@@ -140,7 +140,8 @@ class EmittanceAlgorithm(Algorithm):
             emit: tensor shape n_points x 1 or 2
             bmag: tensor shape n_points x 1 or 2
         """
-        # x_tuning must be shape n_tuning_configs x n_tuning_dims
+        assert len(x_tuning.shape) in [2,3]
+        # x_tuning must be shape (n_tuning_configs, n_tuning_dims) or (n_samples, n_tuning_configs, ndim)
         tkwargs = tkwargs if tkwargs else {"dtype": torch.double, "device": "cpu"}
         
         x = self.get_meas_scan_inputs(x_tuning, bounds, tkwargs) # result shape n_tuning_configs*n_steps x ndim
@@ -149,7 +150,9 @@ class EmittanceAlgorithm(Algorithm):
         # bss.shape = (n_samples, x_tuning.shape[-2], self.n_steps_measurement_param, 1 or 2)
         x = x.reshape(-1, x_tuning.shape[-2], self.n_steps_measurement_param, x.shape[-1])
         # x.shape = (n_samples, x_tuning.shape[-2], self.n_steps_measurement_param, ndim)
-        
+        if len(x_tuning.shape) == 2:
+            x = x.repeat(bss.shape[0],1,1,1)
+
         if self.x_key and not self.y_key:
             k = x[..., self.meas_dim] * self.scale_factor # n_samples x n_tuning x n_steps
             beamsize_squared = bss[...,0] # result shape n_samples x n_tuning x n_steps
@@ -174,6 +177,7 @@ class EmittanceAlgorithm(Algorithm):
             twiss0 = torch.cat((self.twiss0_x.repeat(*bss.shape[:2], 1),
                                self.twiss0_y.repeat(*bss.shape[:2], 1))
                               )
+
         rv = compute_emit_bmag_quad_scan(k.numpy(), 
                                       beamsize_squared.detach().numpy(), 
                                       self.q_len, 
@@ -194,7 +198,7 @@ class EmittanceAlgorithm(Algorithm):
             emit = emit.unsqueeze(-1)
             bmag = bmag.unsqueeze(-1)
         #final shapes: n_samples x n_tuning_configs (?? NEED TO CHECK THIS, don't think it's correct)
-        
+
         return emit, bmag
 
 
