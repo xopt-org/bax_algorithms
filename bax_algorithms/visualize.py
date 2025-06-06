@@ -100,12 +100,12 @@ def visualize_virtual_measurement_result(
     figsize = (4 * dim_x, 3 * len(result_keys))
 
     if dim_x == 1:
-        sharey = False
+        share = False
     else:
-        sharey = True
+        share = True
 
     fig, ax = plt.subplots(
-        nrows=len(result_keys), ncols=dim_x, sharex=True, sharey=sharey, figsize=figsize
+        nrows=len(result_keys), ncols=dim_x, sharex=share, sharey=share, figsize=figsize
     )
     
     for i, key in enumerate(result_keys):
