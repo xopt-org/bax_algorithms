@@ -1,13 +1,12 @@
 import torch
 from matplotlib import pyplot as plt
 from botorch.models import ModelListGP, SingleTaskGP
-
+from typing import List
 from xopt.generators.bayesian.visualize import (
     _generate_input_mesh,
     _get_reference_point,
 )
 from xopt.generators.bayesian.bax_generator import BaxGenerator
-
 from bax_algorithms.utils import get_bax_model_and_bounds
 
 
@@ -19,7 +18,7 @@ def visualize_virtual_measurement_result(
     n_grid: int = 50,
     n_samples: int = 100,
     kwargs: dict = None,
-    result_key: str = 'objective',
+    result_keys: List[str] = ['objective'],
 ) -> tuple:
     """
     Displays BAX's virtual measurement results computed from samples drawn
@@ -88,7 +87,7 @@ def visualize_virtual_measurement_result(
     tkwargs = generator.tkwargs
     x = _generate_input_mesh(vocs, variable_names, reference_point, n_grid, tkwargs)
 
-    # subset bax observable models and bounds
+    # get bax observable models and bounds
     bax_model, bounds = get_bax_model_and_bounds(generator)
 
     # get virtual measurement (sample) results
@@ -97,68 +96,86 @@ def visualize_virtual_measurement_result(
         bax_model, x, bounds, tkwargs=tkwargs, n_samples=n_samples, **kwargs
     )
 
-    result = measurement_result[result_key]
-
-    # get sample stats
-    result_med = result.nanmedian(dim=0)[0].flatten()
-    result_upper = torch.nanquantile(result, q=0.975, dim=0).flatten()
-    result_lower = torch.nanquantile(result, q=0.025, dim=0).flatten()
-    result_std = (result_upper - result_lower) / 4
-
-    figsize = (4 * dim_x, 3.7)
-    fig, ax = plt.subplots(
-        nrows=1, ncols=dim_x, sharex=True, sharey=True, figsize=figsize
-    )
+    # create figure and subplots
+    figsize = (4 * dim_x, 3 * len(result_keys))
 
     if dim_x == 1:
-        # 1d line plot
-        x_axis = x[:, vocs.variable_names.index(variable_names[0])].squeeze().numpy()
-        ax.plot(x_axis, result_med, color="C0", label="Median")
-        ax.fill_between(
-            x_axis,
-            result_lower,
-            result_upper,
-            color="C0",
-            alpha=0.5,
-            label="95% C.I.",
-        )
-        ax.legend()
-        ax.set_ylabel(result_key)
-        ax.set_xlabel(variable_names[0])
+        sharey = False
     else:
-        # 2d heatmaps
-        for j in [0, 1]:
-            ax_j = ax[j]
-            ax_j.locator_params(axis="both", nbins=5)
-            if j == 0:
-                prediction = result_med
-                title = result_key + " Median"
-                cbar_label = title
-            elif j == 1:
-                prediction = result_std
-                title = fr"$\sigma\,$[{result_key}]"
-                cbar_label = title
+        sharey = True
 
-            pcm = ax_j.pcolormesh(
-                x[:, vocs.variable_names.index(variable_names[0])]
-                .reshape(n_grid, n_grid)
-                .numpy(),
-                x[:, vocs.variable_names.index(variable_names[1])]
-                .reshape(n_grid, n_grid)
-                .numpy(),
-                prediction.reshape(n_grid, n_grid),
-                rasterized=True,
+    fig, ax = plt.subplots(
+        nrows=len(result_keys), ncols=dim_x, sharex=True, sharey=sharey, figsize=figsize
+    )
+    
+    for i, key in enumerate(result_keys):
+        
+        result = measurement_result[key]
+    
+        # get sample stats
+        result_med = result.nanmedian(dim=0)[0].flatten()
+        result_upper = torch.nanquantile(result, q=0.975, dim=0).flatten()
+        result_lower = torch.nanquantile(result, q=0.025, dim=0).flatten()
+        result_std = (result_upper - result_lower) / 4
+    
+    
+    
+        if dim_x == 1:
+            if len(result_keys) == 1:
+                ax_i = ax
+            else:
+                ax_i = ax[i]
+            # 1d line plot
+            x_axis = x[:, vocs.variable_names.index(variable_names[0])].squeeze().numpy()
+            ax_i.plot(x_axis, result_med, color="C0", label="Median")
+            ax_i.fill_between(
+                x_axis,
+                result_lower,
+                result_upper,
+                color="C0",
+                alpha=0.5,
+                label="95% C.I.",
             )
-
-            from mpl_toolkits.axes_grid1 import make_axes_locatable  # lazy import
-
-            divider = make_axes_locatable(ax_j)
-            cax = divider.append_axes("right", size="5%", pad=0.1)
-            cbar = plt.colorbar(pcm, cax=cax)
-            ax_j.set_title(title)
-            ax_j.set_xlabel(variable_names[0])
-            ax_j.set_ylabel(variable_names[1])
-            cbar.set_label(cbar_label)
+            ax_i.legend()
+            ax_i.set_ylabel(key)
+            ax_i.set_xlabel(variable_names[0])
+        else:
+            # 2d heatmaps
+            for j in [0, 1]:
+                if len(result_keys) == 1:
+                    ax_ij = ax[j]
+                else:
+                    ax_ij = ax[i,j]
+                ax_ij.locator_params(axis="both", nbins=5)
+                if j == 0:
+                    prediction = result_med
+                    title = key + " Median"
+                    cbar_label = title
+                elif j == 1:
+                    prediction = result_std
+                    title = fr"$\sigma\,$[{key}]"
+                    cbar_label = title
+    
+                pcm = ax_ij.pcolormesh(
+                    x[:, vocs.variable_names.index(variable_names[0])]
+                    .reshape(n_grid, n_grid)
+                    .numpy(),
+                    x[:, vocs.variable_names.index(variable_names[1])]
+                    .reshape(n_grid, n_grid)
+                    .numpy(),
+                    prediction.reshape(n_grid, n_grid),
+                    rasterized=True,
+                )
+    
+                from mpl_toolkits.axes_grid1 import make_axes_locatable  # lazy import
+    
+                divider = make_axes_locatable(ax_ij)
+                cax = divider.append_axes("right", size="5%", pad=0.1)
+                cbar = plt.colorbar(pcm, cax=cax)
+                ax_ij.set_title(title)
+                ax_ij.set_xlabel(variable_names[0])
+                ax_ij.set_ylabel(variable_names[1])
+                cbar.set_label(cbar_label)
 
     fig.tight_layout()
     return fig, ax
