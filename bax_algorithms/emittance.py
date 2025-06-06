@@ -20,7 +20,7 @@ class EmittanceAlgorithm(Algorithm):
     y_key: str = Field(None,
         description="key designating the beamsize squared output in y from evaluate function")
     energy: float = Field(1.0,
-        description="Beam energy in [GeV]")
+        description="Beam energy in [eV]")
     q_len: float = Field(
         description="the longitudinal thickness of the measurement quadrupole"
     )
