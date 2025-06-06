@@ -15,7 +15,7 @@ def visualize_virtual_measurement_result(
     variable_names: list[str] = None,
     idx: int = -1,
     reference_point: dict = None,
-    n_grid: int = 50,
+    n_grid: int = 11,
     n_samples: int = 100,
     kwargs: dict = None,
     result_keys: List[str] = ['objective'],
@@ -99,13 +99,8 @@ def visualize_virtual_measurement_result(
     # create figure and subplots
     figsize = (4 * dim_x, 3 * len(result_keys))
 
-    if dim_x == 1:
-        share = False
-    else:
-        share = True
-
     fig, ax = plt.subplots(
-        nrows=len(result_keys), ncols=dim_x, sharex=share, sharey=share, figsize=figsize
+        nrows=len(result_keys), ncols=dim_x, sharex=False, sharey=False, figsize=figsize
     )
     
     for i, key in enumerate(result_keys):
