@@ -50,6 +50,61 @@ class EmittanceAlgorithm(Algorithm):
         description="Maximum number of iterations in nonlinear emittance fitting.")
 
 
+    @property
+    def x_idx(self) -> int:
+        return self.observable_names_ordered.index(self.x_key)
+
+    @property
+    def y_idx(self) -> int:
+        return self.observable_names_ordered.index(self.y_key)
+
+    def perform_virtual_measurement(self, model, x, bounds, tkwargs:dict=None, n_samples:int=None):
+        """
+        inputs:
+            model: a botorch ModelListGP
+            x_tuning: tensor shape n_points x n_dim specifying points in the full-dimensional model space
+                    at which to evaluate the objective.
+        returns: 
+            res: tensor shape n_points x 1
+            emit: tensor shape n_points x 1 or 2
+            bmag: tensor shape n_points x 1 or 2
+        """
+        tuning_idxs = torch.arange(bounds.shape[1])
+        tuning_idxs = tuning_idxs[tuning_idxs!=self.meas_dim] # remove measurement dim index
+        x_tuning = x[...,tuning_idxs]
+        
+        # x_tuning must be shape n_tuning_configs x n_tuning_dims
+        emit, bmag = self.evaluate_posterior_emittance(model, 
+                                                     x_tuning, 
+                                                     bounds, 
+                                                     tkwargs, 
+                                                     n_samples,
+                                                      )
+
+
+        # store virtual measurement results
+        result = {}
+        if self.x_key:
+            result['emit_x'] = emit[...,self.x_idx]
+            result['bmag_x'] = torch.min(bmag[...,self.x_idx], dim=-1, keepdim=True)[0]
+            objective = result['emit_x']
+            mean_bmag = result['bmag_x']
+        if self.y_key:
+            result['emit_y'] = emit[...,self.y_idx]
+            result['bmag_y'] = torch.min(bmag[...,self.y_idx], dim=-1, keepdim=True)[0]
+            objective = result['emit_y']
+            mean_bmag = result['bmag_y']
+        if self.x_key and self.y_key:
+            objective = (result['emit_x'] * result['emit_y']).sqrt()
+            mean_bmag = (result['bmag_x'] * result['bmag_y']).sqrt()
+
+        if self.use_bmag:
+            objective *= mean_bmag
+
+        result['objective'] = objective
+
+        return result
+
     def get_meas_scan_inputs(self, x_tuning: Tensor, bounds: Tensor, tkwargs: dict=None):
         """
         A function that generates the inputs for virtual emittance measurement scans at the tuning
@@ -95,42 +150,6 @@ class EmittanceAlgorithm(Algorithm):
 
         return x
 
-    def evaluate_virtual_objective(self, model, x, bounds, tkwargs:dict=None, n_samples:int=None):
-        """
-        inputs:
-            model: a botorch ModelListGP
-            x_tuning: tensor shape n_points x n_dim specifying points in the full-dimensional model space
-                    at which to evaluate the objective.
-        returns: 
-            res: tensor shape n_points x 1
-            emit: tensor shape n_points x 1 or 2
-            bmag: tensor shape n_points x 1 or 2
-        """
-        tuning_idxs = torch.arange(bounds.shape[1])
-        tuning_idxs = tuning_idxs[tuning_idxs!=self.meas_dim] # remove measurement dim index
-        x_tuning = x[...,tuning_idxs]
-        
-        # x_tuning must be shape n_tuning_configs x n_tuning_dims
-        emit, bmag = self.evaluate_posterior_emittance(model, 
-                                                     x_tuning, 
-                                                     bounds, 
-                                                     tkwargs, 
-                                                     n_samples,
-                                                      )
-        
-        if self.x_key and self.y_key:
-            res = (emit[...,0] * emit[...,1]).sqrt()
-            if self.use_bmag:
-                bmag_mean = (bmag[...,0] * bmag[...,1]).sqrt()
-                bmag_min, bmag_min_id = torch.min(bmag_mean, dim=-1, keepdim=True)
-                res = bmag_min * res
-        else:
-            res = emit
-            if self.use_bmag:
-                bmag_min, bmag_min_id = torch.min(bmag, dim=-2) # NEED TO CHECK THIS DIM
-                res = (bmag_min * res).squeeze(-1)
-        return res
-
     def evaluate_posterior_emittance(self, model, x_tuning, bounds, tkwargs:dict=None, n_samples:int=None):
         """
         inputs:
@@ -155,12 +174,12 @@ class EmittanceAlgorithm(Algorithm):
 
         if self.x_key and not self.y_key:
             k = x[..., self.meas_dim] * self.scale_factor # n_samples x n_tuning x n_steps
-            beamsize_squared = bss[...,0] # result shape n_samples x n_tuning x n_steps
+            beamsize_squared = bss[...,self.x_idx] # result shape n_samples x n_tuning x n_steps
             rmat = self.rmat_x.to(**tkwargs).repeat(*bss.shape[:2],1,1) # n_samples x n_tuning x 2 x 2
             twiss0 = self.twiss0_x.repeat(*bss.shape[:2], 1)
         elif self.y_key and not self.x_key:
             k = x[..., self.meas_dim] * (-1. * self.scale_factor) # n_samples x n_tuning x n_steps
-            beamsize_squared = bss[...,0] # result shape n_samples x n_tuning x n_steps
+            beamsize_squared = bss[...,self.y_idx] # result shape n_samples x n_tuning x n_steps
             rmat = self.rmat_y.to(**tkwargs).repeat(*bss.shape[:2],1,1) # n_samples x n_tuning x 2 x 2
             twiss0 = self.twiss0_y.repeat(*bss.shape[:2], 1)
         else:
@@ -168,7 +187,7 @@ class EmittanceAlgorithm(Algorithm):
             k_y = k_x * -1. # n_samples x n_tuning x n_steps
             k = torch.cat((k_x, k_y)) # shape (2*n_samples x n_tuning x n_steps)
 
-            beamsize_squared = torch.cat((bss[...,0], bss[...,1]))
+            beamsize_squared = torch.cat((bss[...,self.x_idx], bss[...,self.y_idx]))
 
             rmat_x = self.rmat_x.to(**tkwargs).repeat(*bss.shape[:2],1,1)
             rmat_y = self.rmat_y.to(**tkwargs).repeat(*bss.shape[:2],1,1)
@@ -192,8 +211,10 @@ class EmittanceAlgorithm(Algorithm):
         bmag = torch.from_numpy(rv['bmag'])
 
         if self.x_key and self.y_key:
-            emit = torch.cat((emit[:bss.shape[0]].unsqueeze(-1), emit[bss.shape[0]:].unsqueeze(-1)), dim=-1) # n_samples x n_tuning x 1 or 2
-            bmag = torch.cat((bmag[:bss.shape[0]].unsqueeze(-1), bmag[bss.shape[0]:].unsqueeze(-1)), dim=-1) # n_samples x n_tuning x n_steps x 1 or 2
+            emit = torch.cat((emit[:bss.shape[0]].unsqueeze(-1), emit[bss.shape[0]:].unsqueeze(-1)), dim=-1) 
+            # (n_samples, n_tuning, 1, 2)
+            bmag = torch.cat((bmag[:bss.shape[0]].unsqueeze(-1), bmag[bss.shape[0]:].unsqueeze(-1)), dim=-1) 
+            # (n_samples, n_tuning, n_steps, 2)
         else:
             emit = emit.unsqueeze(-1)
             bmag = bmag.unsqueeze(-1)

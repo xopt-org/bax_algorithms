@@ -51,6 +51,37 @@ class PathwiseOptimization(Algorithm):
         description="names of observable models used in this algorithm",
     )
 
+    @abstractmethod
+    def perform_virtual_measurement(
+        self,
+        model: Model,
+        x: Tensor,
+        bounds: Tensor,
+        n_samples: int = None,
+        tkwargs: dict = None,
+    ) -> dict:
+        '''
+        Defines how the measurement of the virtual objective should be performed.
+        Stores results in a dictionary.
+        Returned dictionary must contain key 'objective' containing the virtual objective results.
+        '''
+        return {'objective': None}
+        
+    def evaluate_virtual_objective(
+        self,
+        model: Model,
+        x: Tensor,
+        bounds: Tensor,
+        n_samples: int = None,
+        tkwargs: dict = None,
+    ) -> Tensor:
+        '''
+        Performs virtual measurement and extracts virtual objective value from resultant dictionary.
+        '''
+
+        measurement_result = self.perform_virtual_measurement(model, x, bounds, n_samples, tkwargs)
+        
+        return measurement_result['objective']
 
     def execute_algorithm(self, sample_functions_list: List[Callable], bounds: Tensor) -> Tensor:
         '''
