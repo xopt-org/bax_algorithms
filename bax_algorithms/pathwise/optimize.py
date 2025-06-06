@@ -98,7 +98,7 @@ class DifferentialEvolution(VirtualOptimizer):
 
         if self.verbose:
             start = time.time()
-            print('Beginning sample optimization.')
+            print('Beginning BAX virtual optimization.')
         res = differential_evolution(target_function, 
                                      bounds=de_bounds, 
                                      vectorized=True, 
@@ -107,7 +107,7 @@ class DifferentialEvolution(VirtualOptimizer):
                                      maxiter=self.maxiter, 
                                      seed=1)
         if self.verbose:
-            print('Sample optimization took:', time.time()-start, 'seconds.')
+            print('BAX virtual optimization took:', time.time()-start, 'seconds.')
 
         if optimization_indeces is not None:
             ndim = len(optimization_indeces)

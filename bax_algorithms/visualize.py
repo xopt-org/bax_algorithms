@@ -88,12 +88,6 @@ def visualize_virtual_measurement_result(
     tkwargs = generator.tkwargs
     x = _generate_input_mesh(vocs, variable_names, reference_point, n_grid, tkwargs)
 
-    # verify model exists
-    if generator.model is None:
-        raise ValueError(
-            "The generator.model doesn't exist, try calling generator.train_model()."
-        )
-
     # subset bax observable models and bounds
     bax_model, bounds = get_bax_model_and_bounds(generator)
 

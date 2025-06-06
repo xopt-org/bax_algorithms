@@ -12,13 +12,40 @@ from gpytorch.kernels import ProductKernel, MaternKernel
 from lcls_tools.common.measurements.emittance_measurement import compute_emit_bmag_quad_scan
 from xopt.generators.bayesian.bax.algorithms import Algorithm
 
+
+def get_quad_scale_factor(energy, q_len):
+    """
+    Computes multiplicative scale factor to convert from LCLS quad PV values (model input space)
+    in [kG] to the geometric focusing strengths in [m^-2].
+
+    Parameters:
+        E: Beam energy in [GeV]
+        q_len: quadrupole length or "thickness" (longitudinal) in [m]
+
+    Returns:
+        conversion_factor: scale factor by which to multiply the LCLS quad PV values [kG] to get
+                            the geometric focusing strengths [m^-2]
+    Example:
+    x_quad = field integrals in [kG]
+    energy = beam energy in [GeV]
+    q_len = quad thickness in [m]
+    scale_factor = get_quad_scale_factor(energy, q_len)
+    k_quad = scale_factor * x_quad # results in the quadrupole geometric focusing strengths
+    """
+    gamma = energy / (0.511e-3)  # beam energy (GeV) divided by electron rest energy (GeV)
+    beta = 1.0 - 1.0 / (2 * gamma**2)
+    scale_factor = 0.299 / (10.0 * q_len * beta * energy)
+
+    return scale_factor
+
+
 class EmittanceAlgorithm(Algorithm):
     x_key: str = Field(None,
         description="key designating the beamsize squared output in x from evaluate function")
     y_key: str = Field(None,
         description="key designating the beamsize squared output in y from evaluate function")
-    scale_factor: float = Field(1.0,
-        description="factor by which to multiply the quad inputs to get focusing strengths")
+    energy: float = Field(1.0,
+        description="Beam energy in [GeV]")
     q_len: float = Field(
         description="the longitudinal thickness of the measurement quadrupole"
     )
@@ -52,11 +79,27 @@ class EmittanceAlgorithm(Algorithm):
 
     @property
     def x_idx(self) -> int:
+        '''
+        The index of the x-beamsize model in the BAX observable ModelList passed
+        to self.get_execution_paths() by Xopt's BaxGenerator.
+        '''
         return self.observable_names_ordered.index(self.x_key)
 
     @property
     def y_idx(self) -> int:
+        '''
+        The index of the y-beamsize model in the BAX observable ModelList passed
+        to self.get_execution_paths() by Xopt's BaxGenerator.
+        '''
         return self.observable_names_ordered.index(self.y_key)
+
+    @property
+    def scale_factor(self):
+        """
+        Multiplicative scale factor to convert from LCLS quad PV values (model input space)
+        in [kG] to the geometric focusing strengths in [m^-2].
+        """
+        return get_quad_scale_factor(self.energy, self.q_len)
 
     def perform_virtual_measurement(self, model, x, bounds, tkwargs:dict=None, n_samples:int=None):
         """
@@ -105,6 +148,7 @@ class EmittanceAlgorithm(Algorithm):
 
         return result
 
+        
     def get_meas_scan_inputs(self, x_tuning: Tensor, bounds: Tensor, tkwargs: dict=None):
         """
         A function that generates the inputs for virtual emittance measurement scans at the tuning
@@ -165,6 +209,9 @@ class EmittanceAlgorithm(Algorithm):
         
         x = self.get_meas_scan_inputs(x_tuning, bounds, tkwargs) # result shape n_tuning_configs*n_steps x ndim
         bss = self.evaluate_virtual_observables(model, x, n_samples) 
+
+        # package inputs for emittance calculation
+
         bss = bss.reshape(-1, x_tuning.shape[-2], self.n_steps_measurement_param, bss.shape[-1])
         # bss.shape = (n_samples, x_tuning.shape[-2], self.n_steps_measurement_param, 1 or 2)
         x = x.reshape(-1, x_tuning.shape[-2], self.n_steps_measurement_param, x.shape[-1])
@@ -197,6 +244,7 @@ class EmittanceAlgorithm(Algorithm):
                                self.twiss0_y.repeat(*bss.shape[:2], 1))
                               )
 
+        # compute emittance
         rv = compute_emit_bmag_quad_scan(k.numpy(), 
                                       beamsize_squared.detach().numpy(), 
                                       self.q_len, 
@@ -204,17 +252,17 @@ class EmittanceAlgorithm(Algorithm):
                                       twiss0.numpy(),
                                       thin_lens=self.thin_lens,
                                       maxiter=self.maxiter_fit)
-        # result shapes: (n_samples x n_tuning), (n_samples x n_tuning x nsteps), (n_samples x n_tuning x 3 x 1), (n_samples x n_tuning) 
-        # or (2*n_samples x n_tuning), (2*n_samples x n_tuning x nsteps), (2*n_samples x n_tuning x 3 x 1), (2*n_samples x n_tuning) 
 
         emit = torch.from_numpy(rv['emittance'])
         bmag = torch.from_numpy(rv['bmag'])
-
+        # emit.shape = (n_samples x n_tuning) or (2*n_samples x n_tuning) if optimizing both x and y
+        # bmag.shape = (n_samples x n_tuning x nsteps) or (2*n_samples x n_tuning x nsteps) if optimizing both x and y
+        
         if self.x_key and self.y_key:
             emit = torch.cat((emit[:bss.shape[0]].unsqueeze(-1), emit[bss.shape[0]:].unsqueeze(-1)), dim=-1) 
-            # (n_samples, n_tuning, 1, 2)
+            # emit.shape = (n_samples, n_tuning, 1, 2)
             bmag = torch.cat((bmag[:bss.shape[0]].unsqueeze(-1), bmag[bss.shape[0]:].unsqueeze(-1)), dim=-1) 
-            # (n_samples, n_tuning, n_steps, 2)
+            # bmag.shape = (n_samples, n_tuning, n_steps, 2)
         else:
             emit = emit.unsqueeze(-1)
             bmag = bmag.unsqueeze(-1)
@@ -231,7 +279,9 @@ class PathwiseMinimizeEmittance(EmittanceAlgorithm, PathwiseOptimization):
 
         best_inputs = self.execute_algorithm(sample_functions_list, bounds)
         best_meas_scan_inputs = self.get_meas_scan_inputs(best_inputs, bounds)
-        best_meas_scan_outputs = torch.vstack([sample_func(best_meas_scan_inputs) for sample_func in sample_functions_list]).T.unsqueeze(0)
+        best_meas_scan_outputs = torch.vstack([sample_func(best_meas_scan_inputs)
+                                               for sample_func in sample_functions_list]
+                                             ).T.unsqueeze(0)
         best_emit, best_bmag = self.evaluate_posterior_emittance(sample_functions_list,
                                                                       best_inputs,
                                                                       bounds
