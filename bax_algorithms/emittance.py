@@ -10,33 +10,8 @@ from botorch.sampling.pathwise.posterior_samplers import draw_matheron_paths
 from botorch.models.model import Model, ModelList
 from gpytorch.kernels import ProductKernel, MaternKernel
 from lcls_tools.common.measurements.emittance_measurement import compute_emit_bmag_quad_scan
+from lcls_tools.common.data.model_general_calcs import bdes_to_kmod
 from xopt.generators.bayesian.bax.algorithms import Algorithm
-
-
-def get_quad_scale_factor(energy, q_len):
-    """
-    Computes multiplicative scale factor to convert from LCLS quad PV values (model input space)
-    in [kG] to the geometric focusing strengths in [m^-2].
-
-    Parameters:
-        E: Beam energy in [GeV]
-        q_len: quadrupole length or "thickness" (longitudinal) in [m]
-
-    Returns:
-        conversion_factor: scale factor by which to multiply the LCLS quad PV values [kG] to get
-                            the geometric focusing strengths [m^-2]
-    Example:
-    x_quad = field integrals in [kG]
-    energy = beam energy in [GeV]
-    q_len = quad thickness in [m]
-    scale_factor = get_quad_scale_factor(energy, q_len)
-    k_quad = scale_factor * x_quad # results in the quadrupole geometric focusing strengths
-    """
-    gamma = energy / (0.511e-3)  # beam energy (GeV) divided by electron rest energy (GeV)
-    beta = 1.0 - 1.0 / (2 * gamma**2)
-    scale_factor = 0.299 / (10.0 * q_len * beta * energy)
-
-    return scale_factor
 
 
 class EmittanceAlgorithm(Algorithm):
@@ -92,14 +67,6 @@ class EmittanceAlgorithm(Algorithm):
         to self.get_execution_paths() by Xopt's BaxGenerator.
         '''
         return self.observable_names_ordered.index(self.y_key)
-
-    @property
-    def scale_factor(self):
-        """
-        Multiplicative scale factor to convert from LCLS quad PV values (model input space)
-        in [kG] to the geometric focusing strengths in [m^-2].
-        """
-        return get_quad_scale_factor(self.energy, self.q_len)
 
     def perform_virtual_measurement(self, model, x, bounds, tkwargs:dict=None, n_samples:int=None):
         """
@@ -220,17 +187,17 @@ class EmittanceAlgorithm(Algorithm):
             x = x.repeat(bss.shape[0],1,1,1)
 
         if self.x_key and not self.y_key:
-            k = x[..., self.meas_dim] * self.scale_factor # n_samples x n_tuning x n_steps
+            k = bdes_to_kmod(self.energy, self.q_len, x[..., self.meas_dim])
             beamsize_squared = bss[...,self.x_idx] # result shape n_samples x n_tuning x n_steps
             rmat = self.rmat_x.to(**tkwargs).repeat(*bss.shape[:2],1,1) # n_samples x n_tuning x 2 x 2
             twiss0 = self.twiss0_x.repeat(*bss.shape[:2], 1)
         elif self.y_key and not self.x_key:
-            k = x[..., self.meas_dim] * (-1. * self.scale_factor) # n_samples x n_tuning x n_steps
+            k = -1 * bdes_to_kmod(self.energy, self.q_len, x[..., self.meas_dim])
             beamsize_squared = bss[...,self.y_idx] # result shape n_samples x n_tuning x n_steps
             rmat = self.rmat_y.to(**tkwargs).repeat(*bss.shape[:2],1,1) # n_samples x n_tuning x 2 x 2
             twiss0 = self.twiss0_y.repeat(*bss.shape[:2], 1)
         else:
-            k_x = (x[..., self.meas_dim] * self.scale_factor) # n_samples x n_tuning x n_steps
+            k_x = bdes_to_kmod(self.energy, self.q_len, x[..., self.meas_dim])
             k_y = k_x * -1. # n_samples x n_tuning x n_steps
             k = torch.cat((k_x, k_y)) # shape (2*n_samples x n_tuning x n_steps)
 
