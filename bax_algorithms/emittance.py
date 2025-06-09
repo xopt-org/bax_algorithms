@@ -96,18 +96,24 @@ class EmittanceAlgorithm(Algorithm):
         result = {}
         if self.x_key:
             result['emit_x'] = emit[...,self.x_idx]
-            result['bmag_x'] = torch.min(bmag[...,self.x_idx], dim=-1, keepdim=True)[0]
+            best_bmag_x = torch.min(bmag[...,self.x_idx], dim=-1, keepdim=True)[0]
+            result['bmag_x'] = best_bmag_x
             objective = result['emit_x']
             mean_bmag = result['bmag_x']
         if self.y_key:
             result['emit_y'] = emit[...,self.y_idx]
-            result['bmag_y'] = torch.min(bmag[...,self.y_idx], dim=-1, keepdim=True)[0]
+            best_bmag_y = torch.min(bmag[...,self.y_idx], dim=-1, keepdim=True)[0]
+            result['bmag_y'] = best_bmag_y
             objective = result['emit_y']
             mean_bmag = result['bmag_y']
         if self.x_key and self.y_key:
             objective = (result['emit_x'] * result['emit_y']).sqrt()
+            best_bmag_idx = torch.min((bmag[...,self.x_idx] * bmag[...,self.y_idx]), dim=-1, keepdim=True)[1]
+            best_bmag_x = torch.gather(bmag[...,self.x_idx],-1,best_bmag_idx)
+            best_bmag_y = torch.gather(bmag[...,self.y_idx],-1,best_bmag_idx)
+            result['bmag_x'] = best_bmag_x
+            result['bmag_y'] = best_bmag_y
             mean_bmag = (result['bmag_x'] * result['bmag_y']).sqrt()
-
         if self.use_bmag:
             objective *= mean_bmag
 
