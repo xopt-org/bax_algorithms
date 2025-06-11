@@ -9,7 +9,7 @@ from bax_algorithms.pathwise.sampling import draw_product_kernel_post_paths
 from botorch.sampling.pathwise.posterior_samplers import draw_matheron_paths
 from botorch.models.model import Model, ModelList
 from gpytorch.kernels import ProductKernel, MaternKernel
-from lcls_tools.common.measurements.emittance_measurement import compute_emit_bmag_quad_scan
+from lcls_tools.common.data.emittance import compute_emit_bmag
 from lcls_tools.common.data.model_general_calcs import bdes_to_kmod
 from xopt.generators.bayesian.bax.algorithms import Algorithm
 
@@ -72,12 +72,12 @@ class EmittanceAlgorithm(Algorithm):
         """
         inputs:
             model: a botorch ModelListGP
-            x_tuning: tensor shape n_points x n_dim specifying points in the full-dimensional model space
+            x: tensor shape (n_points, n_dim) or (n_samples, n_points, n_dim)
+                    specifying points in the full-dimensional model space
                     at which to evaluate the objective.
+            bounds: tensor shape (2, n_dim) specifying the upper and lower measurement bounds
         returns: 
-            res: tensor shape n_points x 1
-            emit: tensor shape n_points x 1 or 2
-            bmag: tensor shape n_points x 1 or 2
+            result: dict containing measurement results
         """
         tuning_idxs = torch.arange(bounds.shape[1])
         tuning_idxs = tuning_idxs[tuning_idxs!=self.meas_dim] # remove measurement dim index
@@ -218,13 +218,13 @@ class EmittanceAlgorithm(Algorithm):
                               )
 
         # compute emittance
-        rv = compute_emit_bmag_quad_scan(k.numpy(), 
-                                      beamsize_squared.detach().numpy(), 
-                                      self.q_len, 
-                                      rmat.numpy(), 
-                                      twiss0.numpy(),
-                                      thin_lens=self.thin_lens,
-                                      maxiter=self.maxiter_fit)
+        rv = compute_emit_bmag(k.numpy(), 
+                               beamsize_squared.detach().numpy(), 
+                               self.q_len, 
+                               rmat.numpy(), 
+                               twiss0.numpy(),
+                               thin_lens=self.thin_lens,
+                               maxiter=self.maxiter_fit)
 
         emit = torch.from_numpy(rv['emittance'])
         bmag = torch.from_numpy(rv['bmag'])
