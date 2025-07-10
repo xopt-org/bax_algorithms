@@ -36,3 +36,20 @@ def multi_level_band(f_x, x_grid, bounds_list = None):
     x_opt = x_grid[idxs[:-1]]
     
     return x_opt, y_opt
+
+
+
+# Implementation adapted from: https://stackoverflow.com/questions/32791911/fast-calculation-of-pareto-front-in-python (Peter)
+def obtain_discrete_pareto_optima(f_x, x_grid):
+    is_efficient = torch.arange(f_x.shape[0])
+    next_point_index = 0  # Next index in the is_efficient array to search for
+    while next_point_index < len(f_x):
+        nondominated_point_mask = torch.any(f_x >= f_x[next_point_index], axis=1)
+        is_efficient = is_efficient[nondominated_point_mask]  # Remove dominated points
+        f_x = f_x[nondominated_point_mask]
+        next_point_index = torch.sum(nondominated_point_mask[:next_point_index]) + 1
+
+    y_opt = f_x[is_efficient]
+    x_opt = x_grid[is_efficient]
+    
+    return x_opt, y_opt
