@@ -1,0 +1,21 @@
+[project]
+name = "bax_algorithms"
+version = "0.1.0"
+description = "Bayesian Algorithm Execution algorithms"
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64"]
+
+[dependencies]
+python = ">=3.9"
+botorch = ">=0.8.5"
+gpytorch = ">=1.10"
+pydantic = ">=1.10.9"
+scipy = ">=1.10.1"
+xopt = ">=1.4"
+
+[pypi-dependencies]
+# Add any PyPI-only packages here if needed
+
+[tasks]
+# Example tasks
+test = "pytest tests/"
