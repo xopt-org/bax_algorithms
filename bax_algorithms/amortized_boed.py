@@ -46,45 +46,60 @@ class AmortizedBOEDGenerator(Generator):
         # Unpack current internal state of the generator
         xi = torch.tensor(self.data[self.vocs.variable_names].values).float().unsqueeze(0)
         y_obs = torch.tensor(self.data[self.vocs.observable_names].values).float().unsqueeze(0)
-        # Pad xi and y_obs to max_measure
-        xi = self.pad(xi)
-        y_obs = self.pad(y_obs)
-        # Sample noise (traced models can't use torch.randn inside)
-        noise = torch.randn(1, xi.shape[1]).float()  # TODO: assumes 1D design for now
-        # Define mask
-        mask = torch.ones(1, self.max_measure).bool()
-        # Mask out 
-        mask[len(xi):] = False 
-        with torch.no_grad():
-            log_probs, candidates = self.model(self.theta_values, y_obs, xi, noise, mask)
-        return [
-            {self.vocs.variable_names[0]: candidates[i].item()} for i in range(n_candidates)
-        ]
-    
+        # # Pad xi and y_obs to max_measure
+        # xi = self.pad(xi)
+        # y_obs = self.pad(y_obs)
+        # Iterate to generate candidates
+        candidates = []
+        # TODO: vectorize over n_candidates
+        for _ in range(n_candidates):
+            # Sample noise (traced models can't use torch.randn inside)
+            noise = torch.randn(1, xi.shape[-1]).float()  # TODO: assumes 1D design for now
+            with torch.no_grad():
+                candidate, log_probs = self.model(self.theta_values, y_obs, xi, noise)
+            candidates.append({self.vocs.variable_names[0]: candidate.item()})
+        return candidates
+
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from xopt import VOCS
     from xopt import Xopt, Evaluator
+    import numpy as np
 
 
-    # define the function  TODO: update this to the double exponential plateau function
-    def f(x, x0, w, b):
-        return -(
-            torch.tanh(-x / b - w / 2 / b + x0 / b) + torch.tanh(x / b - w / 2 / b - x0 / b)
+    # define the function
+    def exp2_piecewise(x, A1, tau1, A2, tau2, T0):
+        """
+        Piecewise double-exponential (numpy version):
+        y(x) = 0,                   x < T0
+            = A1*exp(-(x-T0)/tau1) + A2*exp(-(x-T0)/tau2) - (A1+A2),  x >= T0
+        This enforces y=0 at x=T0.
+        """
+        y_model = np.zeros_like(x, dtype=float)
+        mask = x >= T0
+        x_shift = np.maximum(x - T0, 0.0)
+        y_model[mask] = (
+            A1 * np.exp(-x_shift[mask] / tau1)
+            + A2 * np.exp(-x_shift[mask] / tau2)
+            - (A1 + A2)
         )
+        return y_model
 
 
     # visualize the ground truth function
-    ground_truth_x0 = 4.0  # lower edge location
-    ground_truth_w = 2.5  # plateau width
-    ground_truth_b = 0.1  # sharpness of the plateau edge
-    test_x = torch.linspace(-5, 100, 100)
+    A1 = 3.0
+    tau1 = 0.5
+    A2 = 8.0
+    tau2 = 2.0
+    sigma = 1.0
+    ground_truth_x0 = 30.0
+    test_x = torch.linspace(-10, 100, 100)
 
     fig, ax = plt.subplots()
-    ax.plot(test_x, f(test_x, x0=ground_truth_x0, w=ground_truth_w, b=ground_truth_b))
+    ax.plot(test_x, exp2_piecewise(test_x, A1=A1, tau1=tau1, A2=A2, tau2=tau2, T0=ground_truth_x0))
 
-    # TODO: update this to be default measurement for amortized BOED model.
+    # TODO: How to set first design point?
     vocs = VOCS(variables={"x": [-10, 100]}, observables=["y"])
 
     generator = AmortizedBOEDGenerator(
@@ -95,16 +110,19 @@ if __name__ == "__main__":
     evaluator = Evaluator(
         function=lambda x: {
             "y": float(
-                f(torch.tensor(x["x"]), ground_truth_x0, ground_truth_w, ground_truth_b)
+                exp2_piecewise(torch.tensor(x["x"]), A1=A1, tau1=tau1, A2=A2, tau2=tau2, T0=ground_truth_x0) + (2 * sigma * np.random.rand() - sigma)
             )
         }
     )
 
     X = Xopt(vocs=vocs, generator=generator, evaluator=evaluator)
 
-    X.grid_evaluate(1)
+    init_point = X.vocs.grid_inputs(1)
+    # Replace with a fixed initial point for reproducibility
+    init_point["x"][0] = 100
+    X.evaluate_data(init_point)
 
-    for _ in range(5):
+    for _ in range(generator.max_measure - 1):
         X.step()
 
     X.data.plot.scatter(x="x", y="y", ax=ax, color="red")
