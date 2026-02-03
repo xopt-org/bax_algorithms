@@ -1,5 +1,0 @@
-botorch>=0.8.5
-gpytorch>=1.10
-pydantic>=1.10.9
-scipy>=1.10.1
-xopt>=1.4
