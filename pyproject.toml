@@ -28,7 +28,6 @@ dependencies = [
     "pydantic>=1.10.9",
     "scipy>=1.10.1",
     "xopt>=2.6.11",
-    "lcls-tools",
 ]
 dynamic = ["version"]
 [tool.setuptools_scm]

@@ -1,5 +1,3 @@
-import pytest
-
 import torch
 from xopt import Xopt
 from xopt.vocs import VOCS
@@ -92,11 +90,11 @@ class TestEmittanceBax:
         mean_optimizer = DifferentialEvolution(
             minimize=True, popsize=100, maxiter=100, verbose=True
         )
-        x_tuning = get_bax_mean_prediction(self.X.generator, mean_optimizer)
+        get_bax_mean_prediction(self.X.generator, mean_optimizer)
 
     def test_tuning_input_tensor_to_dict(self):
         x_tuning = torch.tensor([[0.0, 0.0]])
-        x_tuning_dict = tuning_input_tensor_to_dict(self.X.generator, x_tuning)
+        tuning_input_tensor_to_dict(self.X.generator, x_tuning)
 
     def test_get_bax_model_and_bounds(self):
         bax_model, bounds = get_bax_model_and_bounds(self.X.generator)
