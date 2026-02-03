@@ -16,6 +16,7 @@ import importlib.util
 
 def bmag_func(bb, ab, bl, al):
     """
+    TODO: replace function with import from slac-tools upon release.
     SOURCE:
     https://github.com/slaclab/lcls-tools/blob/main/lcls_tools/common/data/model_general_calcs.py
 
@@ -27,6 +28,7 @@ def bmag_func(bb, ab, bl, al):
 
 def propagate_twiss(twiss_init: np.ndarray, rmat: np.ndarray):
     """
+    TODO: replace function with import from slac-tools upon release.
     SOURCE:
     https://github.com/slaclab/lcls-tools/blob/main/lcls_tools/common/data/model_general_calcs.py
 
@@ -53,6 +55,7 @@ def propagate_twiss(twiss_init: np.ndarray, rmat: np.ndarray):
 
 def bdes_to_kmod(e_tot, effective_length, bdes):
     """
+    TODO: replace function with import from slac-tools upon release.
     SOURCE:
     https://github.com/slaclab/lcls-tools/blob/main/lcls_tools/common/data/model_general_calcs.py
 
@@ -65,6 +68,7 @@ def bdes_to_kmod(e_tot, effective_length, bdes):
 
 def build_quad_rmat(k: np.ndarray, q_len: float, thin_lens: bool = False):
     """
+    TODO: replace function with import from slac-tools upon release.
     SOURCE:
     https://github.com/slaclab/lcls-tools/blob/main/lcls_tools/common/data/model_general_calcs.py
 
@@ -123,6 +127,7 @@ def build_quad_rmat(k: np.ndarray, q_len: float, thin_lens: bool = False):
 
 def twiss_transport_mat_from_rmat(rmat: np.ndarray):
     """
+    TODO: replace function with import from slac-tools upon release.
     SOURCE:
     https://github.com/slaclab/lcls-tools/blob/main/lcls_tools/common/data/model_general_calcs.py
 
@@ -154,6 +159,7 @@ def compute_emit_bmag(
     maxiter: int = None,
 ):
     """
+    TODO: replace function with import from slac-tools upon release.
     SOURCE:
     https://github.com/slaclab/lcls-tools/blob/main/lcls_tools/common/data/emittance.py
 
@@ -364,6 +370,7 @@ def compute_emit_bmag_quad_scan(
     maxiter: int = None,
 ):
     """
+    TODO: replace function with import from slac-tools upon release.
     SOURCE:
     https://github.com/slaclab/lcls-tools/blob/main/lcls_tools/common/measurements/emittance_measurement.py
 

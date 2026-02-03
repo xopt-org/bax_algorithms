@@ -7,7 +7,9 @@ name = "bax_algorithms"
 description = "Collection of algorithms that can be used in Bayesian Algorithm Execution (BAX) Xopt generators."
 readme = "README.md"
 authors = [
-  { name = "SLAC National Accelerator Laboratory"},
+  { name = "Dylan Kennedy"},
+  { name = "Sean Gasiorowski"},
+  { name = "Samuel Klein"},
 ]
 keywords = ["machine learning", "accelerator physics"]
 classifiers = [
