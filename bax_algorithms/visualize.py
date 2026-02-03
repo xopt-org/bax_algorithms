@@ -1,6 +1,5 @@
 import torch
 from matplotlib import pyplot as plt
-from botorch.models import ModelListGP, SingleTaskGP
 from typing import List
 from xopt.generators.bayesian.visualize import (
     _generate_input_mesh,
@@ -18,7 +17,7 @@ def visualize_virtual_measurement_result(
     n_grid: int = 11,
     n_samples: int = 100,
     kwargs: dict = None,
-    result_keys: List[str] = ['objective'],
+    result_keys: List[str] = ["objective"],
 ) -> tuple:
     """
     Displays BAX's virtual measurement results computed from samples drawn
@@ -102,26 +101,25 @@ def visualize_virtual_measurement_result(
     fig, ax = plt.subplots(
         nrows=len(result_keys), ncols=dim_x, sharex=False, sharey=False, figsize=figsize
     )
-    
+
     for i, key in enumerate(result_keys):
-        
         result = measurement_result[key]
-    
+
         # get sample stats
         result_med = result.nanmedian(dim=0)[0].flatten()
         result_upper = torch.nanquantile(result, q=0.975, dim=0).flatten()
         result_lower = torch.nanquantile(result, q=0.025, dim=0).flatten()
         result_std = (result_upper - result_lower) / 4
-    
-    
-    
+
         if dim_x == 1:
             if len(result_keys) == 1:
                 ax_i = ax
             else:
                 ax_i = ax[i]
             # 1d line plot
-            x_axis = x[:, vocs.variable_names.index(variable_names[0])].squeeze().numpy()
+            x_axis = (
+                x[:, vocs.variable_names.index(variable_names[0])].squeeze().numpy()
+            )
             ax_i.plot(x_axis, result_med, color="C0", label="Median")
             ax_i.fill_between(
                 x_axis,
@@ -140,7 +138,7 @@ def visualize_virtual_measurement_result(
                 if len(result_keys) == 1:
                     ax_ij = ax[j]
                 else:
-                    ax_ij = ax[i,j]
+                    ax_ij = ax[i, j]
                 ax_ij.locator_params(axis="both", nbins=5)
                 if j == 0:
                     prediction = result_med
@@ -148,9 +146,9 @@ def visualize_virtual_measurement_result(
                     cbar_label = title
                 elif j == 1:
                     prediction = result_std
-                    title = fr"$\sigma\,$[{key}]"
+                    title = rf"$\sigma\,$[{key}]"
                     cbar_label = title
-    
+
                 pcm = ax_ij.pcolormesh(
                     x[:, vocs.variable_names.index(variable_names[0])]
                     .reshape(n_grid, n_grid)
@@ -161,9 +159,9 @@ def visualize_virtual_measurement_result(
                     prediction.reshape(n_grid, n_grid),
                     rasterized=True,
                 )
-    
+
                 from mpl_toolkits.axes_grid1 import make_axes_locatable  # lazy import
-    
+
                 divider = make_axes_locatable(ax_ij)
                 cax = divider.append_axes("right", size="5%", pad=0.1)
                 cbar = plt.colorbar(pcm, cax=cax)

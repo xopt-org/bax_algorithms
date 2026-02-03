@@ -5,7 +5,8 @@ import gpytorch
 import torch
 from botorch.models.gp_regression import SingleTaskGP
 from botorch.sampling.pathwise.prior_samplers import draw_kernel_feature_paths
-from gpytorch.kernels import ProductKernel, MaternKernel
+from gpytorch.kernels import MaternKernel
+
 
 def draw_poly_kernel_prior_paths(
     poly_kernel, n_samples
@@ -38,11 +39,15 @@ def draw_poly_kernel_prior_paths(
 
 def draw_product_kernel_prior_paths(model, n_samples):
     ndim = model.train_inputs[0].shape[1]
-    matern_idx = [type(k) for k in model.covar_module.base_kernel.kernels].index(MaternKernel)
+    matern_idx = [type(k) for k in model.covar_module.base_kernel.kernels].index(
+        MaternKernel
+    )
     matern_covar_module = copy.deepcopy(
         model.covar_module.base_kernel.kernels[matern_idx]
     )  # expects ProductKernel (Matern x Polynomial)
-    matern_dims = copy.copy(model.covar_module.base_kernel.kernels[matern_idx].active_dims)
+    matern_dims = copy.copy(
+        model.covar_module.base_kernel.kernels[matern_idx].active_dims
+    )
     # add assert matern
     matern_covar_module.active_dims = torch.tensor([i for i in range(len(matern_dims))])
     matern_covar_module = gpytorch.kernels.ScaleKernel(matern_covar_module)
@@ -51,7 +56,7 @@ def draw_product_kernel_prior_paths(model, n_samples):
     mean_module = gpytorch.means.ZeroMean()
 
     likelihood = gpytorch.likelihoods.GaussianLikelihood().cpu()
-    likelihood.noise = copy.copy(model.likelihood.noise.detach()) + 1.e-6
+    likelihood.noise = copy.copy(model.likelihood.noise.detach()) + 1.0e-6
 
     outcome_transform = None
     input_transform = None
@@ -60,7 +65,9 @@ def draw_product_kernel_prior_paths(model, n_samples):
     # with kernel matched to the Matern component of the passed model
 
     matern_model = SingleTaskGP(
-        train_X=torch.tensor([[0.0] * (ndim - 1)], device=model.train_inputs[0].device),  # add index specification
+        train_X=torch.tensor(
+            [[0.0] * (ndim - 1)], device=model.train_inputs[0].device
+        ),  # add index specification
         train_Y=torch.tensor([[0.0]], device=model.train_inputs[0].device),
         likelihood=likelihood,
         mean_module=mean_module,
@@ -73,21 +80,26 @@ def draw_product_kernel_prior_paths(model, n_samples):
         model=matern_model, sample_shape=torch.Size([n_samples]), num_features=2048
     )
 
-
-    poly_prior_paths = [draw_poly_kernel_prior_paths(k, n_samples) 
-                        for k in model.covar_module.base_kernel.kernels
-                        if type(k) != MaternKernel]
-    poly_dims = [k.active_dims for k in model.covar_module.base_kernel.kernels
-                        if type(k) != MaternKernel]
+    poly_prior_paths = [
+        draw_poly_kernel_prior_paths(k, n_samples)
+        for k in model.covar_module.base_kernel.kernels
+        if not isinstance(k, MaternKernel)
+    ]
+    poly_dims = [
+        k.active_dims
+        for k in model.covar_module.base_kernel.kernels
+        if not isinstance(k, MaternKernel)
+    ]
 
     def product_kernel_prior_paths(xs):
         xs_matern = torch.index_select(xs, dim=-1, index=matern_dims).float()
-        xs_poly = [torch.index_select(xs, dim=-1, index=dims).float() for dims in poly_dims]
+        xs_poly = [
+            torch.index_select(xs, dim=-1, index=dims).float() for dims in poly_dims
+        ]
         ys_poly = 1.0
         for i in range(len(poly_prior_paths)):
             ys_poly *= poly_prior_paths[i](xs_poly[i])
         return (matern_prior_paths(xs_matern).reshape(n_samples, -1) * ys_poly).double()
-
 
     return product_kernel_prior_paths
 
@@ -148,8 +160,6 @@ def draw_product_kernel_post_paths(model, n_samples, cpu=True):
 
 
 def draw_linear_product_kernel_prior_paths(model, n_samples):
-    ndim = model.train_inputs[0].shape[1]
-
     outputscale = copy.copy(model.covar_module.outputscale.detach())
     kernels = []
     dims = []
@@ -252,8 +262,9 @@ def compare_sampling_methods(
 
         # pathwise sampling
         post_paths = draw_product_kernel_post_paths(
-#         post_paths = draw_linear_product_kernel_post_paths(
-            model, n_samples=n_samples_per_batch
+            #         post_paths = draw_linear_product_kernel_post_paths(
+            model,
+            n_samples=n_samples_per_batch,
         )
 
         pathwise_samples = post_paths(xs_1d_scan).detach()

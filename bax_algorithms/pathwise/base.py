@@ -40,8 +40,9 @@ class PathwiseOptimization(Algorithm):
     """
 
     name = "pathwise_optimization"
-    optimizer: VirtualOptimizer = Field(DifferentialEvolution(),
-        description = "Optimizer for virtual objective.")
+    optimizer: VirtualOptimizer = Field(
+        DifferentialEvolution(), description="Optimizer for virtual objective."
+    )
     results: dict = Field(
         default=None,
         description="dictionary containing algorithm results",
@@ -60,13 +61,13 @@ class PathwiseOptimization(Algorithm):
         n_samples: int = None,
         tkwargs: dict = None,
     ) -> dict:
-        '''
+        """
         Defines how the measurement of the virtual objective should be performed.
         Stores results in a dictionary.
         Returned dictionary must contain key 'objective' containing the virtual objective results.
-        '''
-        return {'objective': None}
-        
+        """
+        return {"objective": None}
+
     def evaluate_virtual_objective(
         self,
         model: Model,
@@ -75,60 +76,71 @@ class PathwiseOptimization(Algorithm):
         n_samples: int = None,
         tkwargs: dict = None,
     ) -> Tensor:
-        '''
+        """
         Performs virtual measurement and extracts virtual objective value from resultant dictionary.
-        '''
+        """
 
-        measurement_result = self.perform_virtual_measurement(model, x, bounds, n_samples, tkwargs)
-        
-        return measurement_result['objective']
+        measurement_result = self.perform_virtual_measurement(
+            model, x, bounds, n_samples, tkwargs
+        )
 
-    def execute_algorithm(self, sample_functions_list: List[Callable], bounds: Tensor) -> Tensor:
-        '''
+        return measurement_result["objective"]
+
+    def execute_algorithm(
+        self, sample_functions_list: List[Callable], bounds: Tensor
+    ) -> Tensor:
+        """
         Run virtual algorithm on pathwise function samples.
-        '''
+        """
 
         optimization_indeces = self._get_optimization_indeces(bounds)
 
         # optimize sample functions
-        best_inputs = self.optimizer.optimize(virtual_objective = self.evaluate_virtual_objective,
-                                              sample_functions_list = sample_functions_list,
-                                              bounds = bounds,
-                                              optimization_indeces = optimization_indeces,
-                                              n_samples = self.n_samples)
+        best_inputs = self.optimizer.optimize(
+            virtual_objective=self.evaluate_virtual_objective,
+            sample_functions_list=sample_functions_list,
+            bounds=bounds,
+            optimization_indeces=optimization_indeces,
+            n_samples=self.n_samples,
+        )
 
         return best_inputs
 
     def get_execution_paths(self, model: Model, bounds: Tensor) -> Tensor:
-        '''
+        """
         Execute algorithm and get execution paths from optimization result.
-        '''
-        
+        """
+
         # draw callable sample functions
         sample_functions_list = self.draw_sample_functions_list(model)
 
         best_inputs = self.execute_algorithm(sample_functions_list, bounds)
-        best_objective = self.evaluate_virtual_objective(sample_functions_list, best_inputs, bounds)
-        
-        self.results = {}
-        self.results['best_inputs'] = best_inputs
-        self.results['best_objective'] = best_objective
-        self.results['sample_functions_list'] = sample_functions_list
+        best_objective = self.evaluate_virtual_objective(
+            sample_functions_list, best_inputs, bounds
+        )
 
-        return best_inputs, best_objective, self.results      
+        self.results = {}
+        self.results["best_inputs"] = best_inputs
+        self.results["best_objective"] = best_objective
+        self.results["sample_functions_list"] = sample_functions_list
+
+        return best_inputs, best_objective, self.results
 
     def draw_sample_functions_list(self, model: Model) -> List:
-        '''
+        """
         Generates a callable function sample object for each observable model
         and stores them in list ordered according to observable_names_ordered.
-        '''
-        sample_funcs_list = [draw_matheron_paths(m, sample_shape=torch.Size([self.n_samples])) for m in model.models]
+        """
+        sample_funcs_list = [
+            draw_matheron_paths(m, sample_shape=torch.Size([self.n_samples]))
+            for m in model.models
+        ]
         return sample_funcs_list
 
     def _get_optimization_indeces(self, bounds) -> Tensor:
-        '''
+        """
         Get indeces specifying parameters for virtual objective optimization.
-        '''
+        """
         return torch.tensor(range(bounds.shape[1]))
 
     def evaluate_virtual_observables(
@@ -137,17 +149,24 @@ class PathwiseOptimization(Algorithm):
         x: Tensor,
         n_samples: int = None,
     ) -> Tensor:
-        '''
+        """
         Evaluate observable models. model must either be a ModelList (GP) or a list of callable function samples.
-        '''
+        """
         if isinstance(model, ModelList):
-            assert len(x.shape) == 2 # x.shape should equal (n_points, ndim)
+            assert len(x.shape) == 2  # x.shape should equal (n_points, ndim)
             p = model.posterior(x)
-            vobs = p.sample(torch.Size([n_samples])) # vobs.shape will be (n_samples, n_points, num_outputs)
+            vobs = p.sample(
+                torch.Size([n_samples])
+            )  # vobs.shape will be (n_samples, n_points, num_outputs)
         else:
             assert n_samples is None
-            assert len(x.shape) in [2,3] # x.shape can be (n_samples, n_points, ndim) for samplewise evaluation
-                                         # or (n_points, ndim) for broadcasting to all samples
+            assert len(x.shape) in [
+                2,
+                3,
+            ]  # x.shape can be (n_samples, n_points, ndim) for samplewise evaluation
+            # or (n_points, ndim) for broadcasting to all samples
             vobs_list = [sample_funcs(x) for sample_funcs in model]
-            vobs = torch.stack(vobs_list, dim=-1) # vobs.shape will be (n_samples, n_points, num_outputs)
+            vobs = torch.stack(
+                vobs_list, dim=-1
+            )  # vobs.shape will be (n_samples, n_points, num_outputs)
         return vobs
