@@ -9,6 +9,8 @@ jobs:
     if: ${{ github.repository == 'xopt-org/bax_algorithms' }}
     name: Build and publish Python distributions to PyPI
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
 
     steps:
       - uses: actions/checkout@v3
