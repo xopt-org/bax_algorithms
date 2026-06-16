@@ -6,6 +6,7 @@ from bax_algorithms.pathwise.base import PathwiseOptimization
 
 
 class PathwiseSolenoidAlignment(PathwiseOptimization):
+    name: str = Field("PathwiseSolenoidAlignment", frozen=True)
     x_key: str = Field(
         None,
         description="key designating the centroid position in x from evaluate function",
@@ -179,7 +180,7 @@ class PathwiseSolenoidAlignment(PathwiseOptimization):
         best_misalignment_list = []
         best_scan_inputs_list = []
         best_scan_outputs_list = []
-
+        results = {}
         for i in range(self.n_batch):
             # draw callable sample functions
             sample_functions_list = self.draw_sample_functions_list(model)
@@ -202,18 +203,23 @@ class PathwiseSolenoidAlignment(PathwiseOptimization):
             best_misalignment_list += [best_misalignment]
             best_scan_inputs_list += [best_meas_scan_inputs]
             best_scan_outputs_list += [best_meas_scan_outputs]
-
-        self.results = {}
+            if i == 0:
+                results = best_result
+            else:
+                for key in results.keys():
+                    results[key] = torch.cat((results[key], best_result[key]), dim=0)
+        self.results = results
         self.results["best_inputs"] = torch.cat(best_inputs_list)
         self.results["best_objective"] = torch.cat(best_objective_list)
         self.results["best_misalignment"] = torch.cat(best_misalignment_list)
-        self.results["best_meas_scan_inputs"] = torch.cat(best_scan_inputs_list)
-        self.results["best_meas_scan_outputs"] = torch.cat(best_scan_outputs_list)
-
+        # self.results["best_meas_scan_inputs"] = torch.cat(best_scan_inputs_list)
+        # self.results["best_meas_scan_outputs"] = torch.cat(best_scan_outputs_list)
+        execution_path_inputs = torch.cat(best_scan_inputs_list)
+        execution_path_outputs = torch.cat(best_scan_outputs_list)
         return (
-            self.results["best_meas_scan_inputs"],
-            self.results["best_meas_scan_outputs"],
-            {},
+            execution_path_inputs,
+            execution_path_outputs,
+            self.results,
         )
 
     def _get_optimization_indeces(self, bounds) -> Tensor:
