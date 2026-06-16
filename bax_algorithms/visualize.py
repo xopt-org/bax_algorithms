@@ -1,3 +1,5 @@
+import os
+import pickle
 import torch
 from matplotlib import pyplot as plt
 from typing import List
@@ -16,6 +18,7 @@ def visualize_virtual_measurement_result(
     reference_point: dict = None,
     n_grid: int = 11,
     n_samples: int = 100,
+    show_observations: bool = True,
     kwargs: dict = None,
     result_keys: List[str] = ["objective"],
 ) -> tuple:
@@ -41,6 +44,9 @@ def visualize_virtual_measurement_result(
         Number of grid points per dimension used to display the model predictions.
     n_samples : int, optional
         Number of virtual measurement samples to evaluate for each point in the scan.
+    show_observations: bool, optional
+        Whether to add a scatter plot of the real observations ("partial measurements", i.e. training data)
+        to the virtual objective plots.
     kwargs : dict, optional
         Additional keyword arguments for evaluating the virtual measurement.
 
@@ -129,6 +135,12 @@ def visualize_virtual_measurement_result(
                 alpha=0.5,
                 label="95% C.I.",
             )
+            if show_observations:
+                x_obs = generator.data[variable_names[0]].to_numpy()
+                label = "Partial Measurements"
+                for val in x_obs:
+                    ax_i.axvline(val, ymax=0.1, c='C1', label=label)
+                    label = None
             ax_i.legend()
             ax_i.set_ylabel(key)
             ax_i.set_xlabel(variable_names[0])
@@ -160,6 +172,11 @@ def visualize_virtual_measurement_result(
                     rasterized=True,
                 )
 
+                if show_observations:
+                    x_obs = generator.data[variable_names].to_numpy()
+                    label = "Partial Measurements"
+                    ax_ij.scatter(x=x_obs[:,0], y=x_obs[:,1], marker='x', c='C1', label=label)
+
                 from mpl_toolkits.axes_grid1 import make_axes_locatable  # lazy import
 
                 divider = make_axes_locatable(ax_ij)
@@ -169,6 +186,135 @@ def visualize_virtual_measurement_result(
                 ax_ij.set_xlabel(variable_names[0])
                 ax_ij.set_ylabel(variable_names[1])
                 cbar.set_label(cbar_label)
+                ax_ij.legend()
 
     fig.tight_layout()
+    return fig, ax
+
+def plot_bax_objective_convergence(
+    generator: BaxGenerator,
+    save_dir: str,
+) -> tuple:
+    """
+    Plots the algorithm sample objective optimization results from each step of BAX.
+
+    Parameters
+    ----------
+    generator : Generator
+        Bayesian generator object.
+    save_dir: str
+        The save directory where the algorithm results files were stored.
+
+    Returns:
+    --------
+        The matplotlib figure and axes objects.
+    """
+    Parameters
+    file_prefix = generator.algorithm_results_file + "_"
+    file_ext = ".pkl"
+    prefix_len = len(file_prefix)
+    ext_len = len(file_ext)
+    files = [filename for filename in os.listdir(save_dir) if filename.startswith(file_prefix)]
+    files = sorted(files, key = lambda x: int(x[prefix_len:-ext_len]))
+
+    results_dicts = []
+    aggregated_results_dict = {}
+    for filename in files:
+        with open(filename, 'rb') as fname:
+            loaded_dict = pickle.load(fname)
+        results_dicts += [loaded_dict]
+    for key in results_dicts[0].keys():
+        aggregated_results_dict[key] = torch.stack([res[key] for res in results_dicts])
+
+    # plot the sample objective optima
+    objs = aggregated_results_dict["objective"].squeeze(-1).squeeze(-1)
+    iters = range(objs.shape[0])
+    med = objs.quantile(0.5, dim=1).detach()
+    upper = objs.quantile(0.975, dim=1).detach()
+    lower = objs.quantile(0.025, dim=1).detach()
+    
+    fig, ax = plt.subplots(1, 1)
+    ax.set_title('BAX Solutions: Objective')
+    ax.plot(iters, med, label="median")
+    ax.fill_between(iters, lower, upper, alpha=0.5, label="95% C.I.")
+    ax.legend(loc="upper left")
+    ax.set_xlabel('iteration')
+    ax.set_ylabel('Objective')
+
+    fig.set_size_inches(6,3)
+    fig.tight_layout()
+
+    return fig, ax
+
+def plot_bax_input_convergence(
+    generator: BaxGenerator,
+    save_dir: str,
+) -> tuple:
+    """
+    Plots the algorithm sample input optimization results from each step of BAX.
+
+    Parameters
+    ----------
+    generator : Generator
+        Bayesian generator object.
+    save_dir: str
+        The save directory where the algorithm results files were stored.
+
+    Returns:
+    --------
+        The matplotlib figure and axes objects.
+    """
+    file_prefix = generator.algorithm_results_file + "_"
+    file_ext = ".pkl"
+    prefix_len = len(file_prefix)
+    ext_len = len(file_ext)
+    files = [filename for filename in os.listdir(save_dir) if filename.startswith(file_prefix)]
+    files = sorted(files, key = lambda x: int(x[prefix_len:-ext_len]))
+
+    results_dicts = []
+    aggregated_results_dict = {}
+    for filename in files:
+        with open(filename, 'rb') as fname:
+            loaded_dict = pickle.load(fname)
+        results_dicts += [loaded_dict]
+    for key in results_dicts[0].keys():
+        aggregated_results_dict[key] = torch.stack([res[key] for res in results_dicts])
+
+    # plot the sample input optima
+    solutions = aggregated_results_dict['best_inputs']
+    solutions = solutions.squeeze(-2)
+    iters = range(solutions.shape[0])
+    ndim = solutions.shape[-1]
+    fig, ax = plt.subplots(ndim, 1, sharex=True)
+    if ndim == 1:
+        ax = [ax]
+    for i in range(ndim):
+        med = solutions[...,i].quantile(0.5, dim=1)
+        upper = solutions[...,i].quantile(0.975, dim=1)
+        lower = solutions[...,i].quantile(0.025, dim=1)
+        ax_i = ax[i]
+        if i == 0:
+            ax_i.set_title('BAX Solutions: Input(s)')
+        ax_i.plot(iters, med, label="median")
+        ax_i.fill_between(iters, lower, upper, alpha=0.5, label="95% C.I.")
+        var_name = list(generator.vocs.variables.keys())[i]
+        bbox = dict(
+            boxstyle='round,pad=0.5',
+            facecolor='lightgray',
+            edgecolor='silver',
+            alpha=0.7
+        )
+        ax_i.text(0.0275, 0.06, var_name, 
+                transform=ax_i.transAxes, 
+                fontsize=12,
+                verticalalignment='bottom', 
+                horizontalalignment='left',
+                bbox=bbox)
+        ax_i.set_ylim(generator.vocs.variables[var_name].domain)
+        ax_i.legend(loc="upper left")
+    ax_i.set_xlabel('iteration')
+
+    fig.set_size_inches(6,3*ndim)
+    fig.tight_layout()
+
     return fig, ax
