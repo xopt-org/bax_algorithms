@@ -140,7 +140,7 @@ def visualize_virtual_measurement_result(
                 x_obs = generator.data[variable_names[0]].to_numpy()
                 label = "Partial Measurements"
                 for val in x_obs:
-                    ax_i.axvline(val, ymax=0.1, c='C1', label=label)
+                    ax_i.axvline(val, ymax=0.1, c="C1", label=label)
                     label = None
             ax_i.legend()
             ax_i.set_ylabel(key)
@@ -176,7 +176,9 @@ def visualize_virtual_measurement_result(
                 if show_observations:
                     x_obs = generator.data[variable_names].to_numpy()
                     label = "Partial Measurements"
-                    ax_ij.scatter(x=x_obs[:,0], y=x_obs[:,1], marker='x', c='C1', label=label)
+                    ax_ij.scatter(
+                        x=x_obs[:, 0], y=x_obs[:, 1], marker="x", c="C1", label=label
+                    )
 
                 from mpl_toolkits.axes_grid1 import make_axes_locatable  # lazy import
 
@@ -191,6 +193,7 @@ def visualize_virtual_measurement_result(
 
     fig.tight_layout()
     return fig, ax
+
 
 def plot_bax_objective_convergence(
     generator: BaxGenerator,
@@ -212,17 +215,23 @@ def plot_bax_objective_convergence(
     prefix_len = len(file_prefix)
     ext_len = len(file_ext)
     directory = os.path.dirname(os.path.abspath(generator.algorithm_results_file))
-    file_names = [file_name for file_name in os.listdir(directory) if file_name.startswith(file_prefix)]
-    file_names = sorted(file_names, key = lambda x: int(x[prefix_len:-ext_len]))
+    file_names = [
+        file_name
+        for file_name in os.listdir(directory)
+        if file_name.startswith(file_prefix)
+    ]
+    file_names = sorted(file_names, key=lambda x: int(x[prefix_len:-ext_len]))
     file_paths = [os.path.abspath(file_name) for file_name in file_names]
 
     results_dicts = []
     aggregated_results_dict = {}
     for file_path in file_paths:
-        with open(file_path, 'rb') as fpath:
+        with open(file_path, "rb") as fpath:
             loaded_dict = pickle.load(fpath)
         results_dicts += [loaded_dict]
-    aggregated_results_dict["best_objective"] = torch.stack([res["best_objective"] for res in results_dicts])
+    aggregated_results_dict["best_objective"] = torch.stack(
+        [res["best_objective"] for res in results_dicts]
+    )
 
     # plot the sample objective optima
     objs = aggregated_results_dict["best_objective"].squeeze(-1).squeeze(-1)
@@ -230,19 +239,20 @@ def plot_bax_objective_convergence(
     med = objs.quantile(0.5, dim=1).detach()
     upper = objs.quantile(0.975, dim=1).detach()
     lower = objs.quantile(0.025, dim=1).detach()
-    
+
     fig, ax = plt.subplots(1, 1)
-    ax.set_title('BAX Solutions: Objective')
+    ax.set_title("BAX Solutions: Objective")
     ax.plot(iters, med, label="median")
     ax.fill_between(iters, lower, upper, alpha=0.5, label="95% C.I.")
     ax.legend(loc="upper left")
-    ax.set_xlabel('iteration')
-    ax.set_ylabel('Objective')
+    ax.set_xlabel("iteration")
+    ax.set_ylabel("Objective")
 
-    fig.set_size_inches(6,3)
+    fig.set_size_inches(6, 3)
     fig.tight_layout()
 
     return fig, ax
+
 
 def plot_bax_input_convergence(
     generator: BaxGenerator,
@@ -264,20 +274,26 @@ def plot_bax_input_convergence(
     prefix_len = len(file_prefix)
     ext_len = len(file_ext)
     directory = os.path.dirname(os.path.abspath(generator.algorithm_results_file))
-    file_names = [file_name for file_name in os.listdir(directory) if file_name.startswith(file_prefix)]
-    file_names = sorted(file_names, key = lambda x: int(x[prefix_len:-ext_len]))
+    file_names = [
+        file_name
+        for file_name in os.listdir(directory)
+        if file_name.startswith(file_prefix)
+    ]
+    file_names = sorted(file_names, key=lambda x: int(x[prefix_len:-ext_len]))
     file_paths = [os.path.abspath(file_name) for file_name in file_names]
 
     results_dicts = []
     aggregated_results_dict = {}
     for file_path in file_paths:
-        with open(file_path, 'rb') as fpath:
+        with open(file_path, "rb") as fpath:
             loaded_dict = pickle.load(fpath)
         results_dicts += [loaded_dict]
-    aggregated_results_dict["best_inputs"] = torch.stack([res["best_inputs"] for res in results_dicts])
+    aggregated_results_dict["best_inputs"] = torch.stack(
+        [res["best_inputs"] for res in results_dicts]
+    )
 
     # plot the sample input optima
-    solutions = aggregated_results_dict['best_inputs']
+    solutions = aggregated_results_dict["best_inputs"]
     solutions = solutions.squeeze(-2)
     iters = range(solutions.shape[0])
     ndim = solutions.shape[-1]
@@ -285,32 +301,36 @@ def plot_bax_input_convergence(
     if ndim == 1:
         ax = [ax]
     for i in range(ndim):
-        med = solutions[...,i].quantile(0.5, dim=1)
-        upper = solutions[...,i].quantile(0.975, dim=1)
-        lower = solutions[...,i].quantile(0.025, dim=1)
+        med = solutions[..., i].quantile(0.5, dim=1)
+        upper = solutions[..., i].quantile(0.975, dim=1)
+        lower = solutions[..., i].quantile(0.025, dim=1)
         ax_i = ax[i]
         if i == 0:
-            ax_i.set_title('BAX Solutions: Input(s)')
+            ax_i.set_title("BAX Solutions: Input(s)")
         ax_i.plot(iters, med, label="median")
         ax_i.fill_between(iters, lower, upper, alpha=0.5, label="95% C.I.")
         var_name = list(generator.vocs.variables.keys())[i]
         bbox = dict(
-            boxstyle='round,pad=0.5',
-            facecolor='lightgray',
-            edgecolor='silver',
-            alpha=0.7
+            boxstyle="round,pad=0.5",
+            facecolor="lightgray",
+            edgecolor="silver",
+            alpha=0.7,
         )
-        ax_i.text(0.0275, 0.06, var_name, 
-                transform=ax_i.transAxes, 
-                fontsize=12,
-                verticalalignment='bottom', 
-                horizontalalignment='left',
-                bbox=bbox)
+        ax_i.text(
+            0.0275,
+            0.06,
+            var_name,
+            transform=ax_i.transAxes,
+            fontsize=12,
+            verticalalignment="bottom",
+            horizontalalignment="left",
+            bbox=bbox,
+        )
         ax_i.set_ylim(generator.vocs.variables[var_name].domain)
         ax_i.legend(loc="upper left")
-    ax_i.set_xlabel('iteration')
+    ax_i.set_xlabel("iteration")
 
-    fig.set_size_inches(6,3*ndim)
+    fig.set_size_inches(6, 3 * ndim)
     fig.tight_layout()
 
     return fig, ax
