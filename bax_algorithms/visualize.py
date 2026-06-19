@@ -18,7 +18,7 @@ def visualize_virtual_measurement_result(
     reference_point: dict = None,
     n_grid: int = 11,
     n_samples: int = 100,
-    show_observations: bool = True,
+    show_observations: bool = False,
     kwargs: dict = None,
     result_keys: List[str] = ["objective"],
 ) -> tuple:
@@ -52,6 +52,7 @@ def visualize_virtual_measurement_result(
 
     Returns:
     --------
+    fig, ax
         The matplotlib figure and axes objects.
     """
     vocs, data = generator.vocs, generator.data
@@ -99,7 +100,7 @@ def visualize_virtual_measurement_result(
     kwargs = kwargs if kwargs else {}
     measurement_result = generator.algorithm.perform_virtual_measurement(
         bax_model, x, bounds, tkwargs=tkwargs, n_samples=n_samples, **kwargs
-    )
+    ).model_dump()
 
     # create figure and subplots
     figsize = (4 * dim_x, 3 * len(result_keys))
@@ -193,40 +194,38 @@ def visualize_virtual_measurement_result(
 
 def plot_bax_objective_convergence(
     generator: BaxGenerator,
-    save_dir: str,
 ) -> tuple:
     """
     Plots the algorithm sample objective optimization results from each step of BAX.
 
     Parameters
     ----------
-    generator : Generator
-        Bayesian generator object.
-    save_dir: str
-        The save directory where the algorithm results files were stored.
+    generator : BaxGenerator
 
     Returns:
     --------
+    fig, ax
         The matplotlib figure and axes objects.
     """
-    file_prefix = generator.algorithm_results_file + "_"
+    file_prefix = os.path.basename(generator.algorithm_results_file) + "_"
     file_ext = ".pkl"
     prefix_len = len(file_prefix)
     ext_len = len(file_ext)
-    files = [filename for filename in os.listdir(save_dir) if filename.startswith(file_prefix)]
-    files = sorted(files, key = lambda x: int(x[prefix_len:-ext_len]))
+    directory = os.path.dirname(os.path.abspath(generator.algorithm_results_file))
+    file_names = [file_name for file_name in os.listdir(directory) if file_name.startswith(file_prefix)]
+    file_names = sorted(file_names, key = lambda x: int(x[prefix_len:-ext_len]))
+    file_paths = [os.path.abspath(file_name) for file_name in file_names]
 
     results_dicts = []
     aggregated_results_dict = {}
-    for filename in files:
-        with open(filename, 'rb') as fname:
-            loaded_dict = pickle.load(fname)
+    for file_path in file_paths:
+        with open(file_path, 'rb') as fpath:
+            loaded_dict = pickle.load(fpath)
         results_dicts += [loaded_dict]
-    for key in results_dicts[0].keys():
-        aggregated_results_dict[key] = torch.stack([res[key] for res in results_dicts])
+    aggregated_results_dict["best_objective"] = torch.stack([res["best_objective"] for res in results_dicts])
 
     # plot the sample objective optima
-    objs = aggregated_results_dict["objective"].squeeze(-1).squeeze(-1)
+    objs = aggregated_results_dict["best_objective"].squeeze(-1).squeeze(-1)
     iters = range(objs.shape[0])
     med = objs.quantile(0.5, dim=1).detach()
     upper = objs.quantile(0.975, dim=1).detach()
@@ -247,37 +246,35 @@ def plot_bax_objective_convergence(
 
 def plot_bax_input_convergence(
     generator: BaxGenerator,
-    save_dir: str,
 ) -> tuple:
     """
     Plots the algorithm sample input optimization results from each step of BAX.
 
     Parameters
     ----------
-    generator : Generator
-        Bayesian generator object.
-    save_dir: str
-        The save directory where the algorithm results files were stored.
+    generator : BaxGenerator
 
     Returns:
     --------
+    fig, ax
         The matplotlib figure and axes objects.
     """
-    file_prefix = generator.algorithm_results_file + "_"
+    file_prefix = os.path.basename(generator.algorithm_results_file) + "_"
     file_ext = ".pkl"
     prefix_len = len(file_prefix)
     ext_len = len(file_ext)
-    files = [filename for filename in os.listdir(save_dir) if filename.startswith(file_prefix)]
-    files = sorted(files, key = lambda x: int(x[prefix_len:-ext_len]))
+    directory = os.path.dirname(os.path.abspath(generator.algorithm_results_file))
+    file_names = [file_name for file_name in os.listdir(directory) if file_name.startswith(file_prefix)]
+    file_names = sorted(file_names, key = lambda x: int(x[prefix_len:-ext_len]))
+    file_paths = [os.path.abspath(file_name) for file_name in file_names]
 
     results_dicts = []
     aggregated_results_dict = {}
-    for filename in files:
-        with open(filename, 'rb') as fname:
-            loaded_dict = pickle.load(fname)
+    for file_path in file_paths:
+        with open(file_path, 'rb') as fpath:
+            loaded_dict = pickle.load(fpath)
         results_dicts += [loaded_dict]
-    for key in results_dicts[0].keys():
-        aggregated_results_dict[key] = torch.stack([res[key] for res in results_dicts])
+    aggregated_results_dict["best_inputs"] = torch.stack([res["best_inputs"] for res in results_dicts])
 
     # plot the sample input optima
     solutions = aggregated_results_dict['best_inputs']
