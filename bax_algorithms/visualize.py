@@ -177,8 +177,9 @@ def visualize_virtual_measurement_result(
                     x_obs = generator.data[variable_names].to_numpy()
                     label = "Partial Measurements"
                     ax_ij.scatter(
-                        x=x_obs[:, 0], y=x_obs[:, 1], marker="x", c="C1", label=label
+                        x=x_obs[:, 0], y=x_obs[:, 1], c="C1", label=label
                     )
+                    ax_ij.legend()
 
                 from mpl_toolkits.axes_grid1 import make_axes_locatable  # lazy import
 
@@ -189,7 +190,6 @@ def visualize_virtual_measurement_result(
                 ax_ij.set_xlabel(variable_names[0])
                 ax_ij.set_ylabel(variable_names[1])
                 cbar.set_label(cbar_label)
-                ax_ij.legend()
 
     fig.tight_layout()
     return fig, ax
@@ -296,11 +296,16 @@ def plot_bax_input_convergence(
     solutions = aggregated_results_dict["best_inputs"]
     solutions = solutions.squeeze(-2)
     iters = range(solutions.shape[0])
-    ndim = solutions.shape[-1]
+    if hasattr(generator, "_get_optimization_indeces") and callable(getattr(obj, "_get_optimization_indeces")):
+        variable_indeces = generator._get_optimization_indeces(X.generator.vocs.bounds)
+        ndim = len(variable_indeces)
+    else:
+        ndim = solutions.shape[-1]
+        variable_indeces = range(ndim)
     fig, ax = plt.subplots(ndim, 1, sharex=True)
     if ndim == 1:
         ax = [ax]
-    for i in range(ndim):
+    for i in variable_indeces:
         med = solutions[..., i].quantile(0.5, dim=1)
         upper = solutions[..., i].quantile(0.975, dim=1)
         lower = solutions[..., i].quantile(0.025, dim=1)
