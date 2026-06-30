@@ -176,9 +176,7 @@ def visualize_virtual_measurement_result(
                 if show_observations:
                     x_obs = generator.data[variable_names].to_numpy()
                     label = "Partial Measurements"
-                    ax_ij.scatter(
-                        x=x_obs[:, 0], y=x_obs[:, 1], c="C1", label=label
-                    )
+                    ax_ij.scatter(x=x_obs[:, 0], y=x_obs[:, 1], c="C1", label=label)
                     ax_ij.legend()
 
                 from mpl_toolkits.axes_grid1 import make_axes_locatable  # lazy import
@@ -296,8 +294,12 @@ def plot_bax_input_convergence(
     solutions = aggregated_results_dict["best_inputs"]
     solutions = solutions.squeeze(-2)
     iters = range(solutions.shape[0])
-    if hasattr(generator, "_get_optimization_indeces") and callable(getattr(obj, "_get_optimization_indeces")):
-        variable_indeces = generator._get_optimization_indeces(X.generator.vocs.bounds)
+    if hasattr(generator.algorithm, "_get_optimization_indeces") and callable(
+        getattr(generator.algorithm, "_get_optimization_indeces")
+    ):
+        variable_indeces = generator.algorithm._get_optimization_indeces(
+            generator._get_optimization_bounds()
+        )
         ndim = len(variable_indeces)
     else:
         ndim = solutions.shape[-1]

@@ -798,8 +798,6 @@ class PathwiseMinimizeEmittance(EmittanceAlgorithm, PathwiseOptimization):
     def execute(self, model: Model, bounds: Tensor) -> Tensor:
         best_tuning_inputs_list = []
         best_objective_list = []
-        best_emittance_list = []
-        best_bmag_list = []
         best_scan_inputs_list = []
         best_scan_outputs_list = []
         for i in range(self.n_batch):
