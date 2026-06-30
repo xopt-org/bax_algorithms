@@ -307,7 +307,7 @@ def plot_bax_input_convergence(
     fig, ax = plt.subplots(ndim, 1, sharex=True)
     if ndim == 1:
         ax = [ax]
-    for i in variable_indeces:
+    for i, j in enumerate(variable_indeces):
         med = solutions[..., i].quantile(0.5, dim=1)
         upper = solutions[..., i].quantile(0.975, dim=1)
         lower = solutions[..., i].quantile(0.025, dim=1)
@@ -316,7 +316,7 @@ def plot_bax_input_convergence(
             ax_i.set_title("BAX Solutions: Input(s)")
         ax_i.plot(iters, med, label="median")
         ax_i.fill_between(iters, lower, upper, alpha=0.5, label="95% C.I.")
-        var_name = list(generator.vocs.variables.keys())[i]
+        var_name = list(generator.vocs.variables.keys())[j]
         bbox = dict(
             boxstyle="round,pad=0.5",
             facecolor="lightgray",
