@@ -84,9 +84,9 @@ class PathwiseOptimization(Algorithm):
             model, x, bounds, n_samples, tkwargs
         )
 
-        return measurement_result["objective"]
+        return measurement_result.objective
 
-    def execute_algorithm(
+    def optimize_samples_funcs_list(
         self, sample_functions_list: List[Callable], bounds: Tensor
     ) -> Tensor:
         """
@@ -96,7 +96,7 @@ class PathwiseOptimization(Algorithm):
         optimization_indeces = self._get_optimization_indeces(bounds)
 
         # optimize sample functions
-        best_inputs = self.optimizer.optimize(
+        best_tuning_inputs = self.optimizer.optimize(
             virtual_objective=self.evaluate_virtual_objective,
             sample_functions_list=sample_functions_list,
             bounds=bounds,
@@ -104,27 +104,7 @@ class PathwiseOptimization(Algorithm):
             n_samples=self.n_samples,
         )
 
-        return best_inputs
-
-    def get_execution_paths(self, model: Model, bounds: Tensor) -> Tensor:
-        """
-        Execute algorithm and get execution paths from optimization result.
-        """
-
-        # draw callable sample functions
-        sample_functions_list = self.draw_sample_functions_list(model)
-
-        best_inputs = self.execute_algorithm(sample_functions_list, bounds)
-        best_objective = self.evaluate_virtual_objective(
-            sample_functions_list, best_inputs, bounds
-        )
-
-        self.results = {}
-        self.results["best_inputs"] = best_inputs
-        self.results["best_objective"] = best_objective
-        self.results["sample_functions_list"] = sample_functions_list
-
-        return best_inputs, best_objective, self.results
+        return best_tuning_inputs
 
     def draw_sample_functions_list(self, model: Model) -> List:
         """

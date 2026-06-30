@@ -1,4 +1,5 @@
-from pydantic import Field
+from pydantic import Field, PositiveInt
+from typing import Optional
 import torch
 from torch import Tensor
 
@@ -7,7 +8,11 @@ from bax_algorithms.pathwise.base import PathwiseOptimization
 from bax_algorithms.pathwise.sampling import draw_product_kernel_post_paths
 from botorch.sampling.pathwise.posterior_samplers import draw_matheron_paths
 from botorch.models.model import Model
-from xopt.generators.bayesian.bax.algorithms import Algorithm
+from xopt.generators.bayesian.bax.algorithms import (
+    Algorithm,
+    OptimizationAlgorithmResult,
+    VirtualMeasurementResult,
+)
 
 import numpy as np
 from scipy.optimize import minimize
@@ -438,6 +443,23 @@ def compute_emit_bmag_quad_scan(
     return rv
 
 
+class VirtualEmittanceMeasurementResult(VirtualMeasurementResult):
+    emittance_x: Optional[Tensor] = Field(
+        default=None,
+        description="The geometric emittance in the x transverse dimension.",
+    )
+    emittance_y: Optional[Tensor] = Field(
+        default=None,
+        description="The geometric emittance in the y transverse dimension.",
+    )
+    bmag_x: Optional[Tensor] = Field(
+        default=None, description="The Bmag in the x transverse dimension."
+    )
+    bmag_y: Optional[Tensor] = Field(
+        default=None, description="The Bmag in the y transverse dimension."
+    )
+
+
 class EmittanceAlgorithm(Algorithm):
     x_key: str = Field(
         None,
@@ -518,7 +540,7 @@ class EmittanceAlgorithm(Algorithm):
                     at which to evaluate the objective.
             bounds: tensor shape (2, n_dim) specifying the upper and lower measurement bounds
         returns:
-            result: dict containing measurement results
+            VirtualEmittanceMeasurementResult
         """
         tuning_idxs = torch.arange(bounds.shape[1])
         tuning_idxs = tuning_idxs[
@@ -536,21 +558,26 @@ class EmittanceAlgorithm(Algorithm):
         )
 
         # store virtual measurement results
-        result = {}
+        result = {
+            "emittance_x": None,
+            "emittance_y": None,
+            "bmag_x": None,
+            "bmag_y": None,
+        }
         if self.x_key:
-            result["emit_x"] = emit[..., self.x_idx]
+            result["emittance_x"] = emit[..., self.x_idx]
             best_bmag_x = torch.min(bmag[..., self.x_idx], dim=-1, keepdim=True)[0]
             result["bmag_x"] = best_bmag_x
-            objective = result["emit_x"]
+            objective = result["emittance_x"]
             mean_bmag = result["bmag_x"]
         if self.y_key:
-            result["emit_y"] = emit[..., self.y_idx]
+            result["emittance_y"] = emit[..., self.y_idx]
             best_bmag_y = torch.min(bmag[..., self.y_idx], dim=-1, keepdim=True)[0]
             result["bmag_y"] = best_bmag_y
-            objective = result["emit_y"]
+            objective = result["emittance_y"]
             mean_bmag = result["bmag_y"]
         if self.x_key and self.y_key:
-            objective = (result["emit_x"] * result["emit_y"]).sqrt()
+            objective = (result["emittance_x"] * result["emittance_y"]).sqrt()
             best_bmag_idcs = torch.min(
                 (bmag[..., self.x_idx] * bmag[..., self.y_idx]), dim=-1, keepdim=True
             )[1]
@@ -562,9 +589,14 @@ class EmittanceAlgorithm(Algorithm):
         if self.use_bmag:
             objective *= mean_bmag
 
-        result["objective"] = objective
-
-        return result
+        algorithm_result = VirtualEmittanceMeasurementResult(
+            objective=objective,
+            emittance_x=result["emittance_x"],
+            emittance_y=result["emittance_y"],
+            bmag_x=result["bmag_x"],
+            bmag_y=result["bmag_y"],
+        )
+        return algorithm_result
 
     def get_meas_scan_inputs(
         self, x_tuning: Tensor, bounds: Tensor, tkwargs: dict = None
@@ -758,28 +790,57 @@ class EmittanceAlgorithm(Algorithm):
 
 
 class PathwiseMinimizeEmittance(EmittanceAlgorithm, PathwiseOptimization):
-    def get_execution_paths(self, model: Model, bounds: Tensor) -> Tensor:
-        # draw callable sample functions
-        sample_functions_list = self.draw_sample_functions_list(model)
+    n_batch: PositiveInt = Field(
+        1,
+        description="Number of sample batches to optimize, with each batch containing self.n_samples",
+    )
 
-        best_inputs = self.execute_algorithm(sample_functions_list, bounds)
-        best_meas_scan_inputs = self.get_meas_scan_inputs(best_inputs, bounds)
-        best_meas_scan_outputs = torch.vstack(
-            [
-                sample_func(best_meas_scan_inputs)
-                for sample_func in sample_functions_list
-            ]
-        ).T.unsqueeze(0)
-        best_emit, best_bmag = self.evaluate_posterior_emittance(
-            sample_functions_list, best_inputs, bounds
+    def execute(self, model: Model, bounds: Tensor) -> Tensor:
+        best_tuning_inputs_list = []
+        best_objective_list = []
+        best_scan_inputs_list = []
+        best_scan_outputs_list = []
+        for i in range(self.n_batch):
+            # draw callable sample functions
+            sample_functions_list = self.draw_sample_functions_list(model)
+
+            best_tuning_inputs = self.optimize_samples_funcs_list(
+                sample_functions_list, bounds
+            )
+            best_meas_scan_inputs = self.get_meas_scan_inputs(
+                best_tuning_inputs, bounds
+            )
+            best_meas_scan_outputs = torch.vstack(
+                [
+                    sample_func(best_meas_scan_inputs)
+                    for sample_func in sample_functions_list
+                ]
+            ).T.unsqueeze(0)
+            best_result = self.perform_virtual_measurement(
+                sample_functions_list, best_meas_scan_inputs[:, :1, :], bounds
+            )
+            best_tuning_inputs_list += [best_tuning_inputs]
+            best_objective_list += [best_result.objective]
+            best_scan_inputs_list += [best_meas_scan_inputs]
+            best_scan_outputs_list += [best_meas_scan_outputs]
+
+        input_execution_paths = torch.cat(best_scan_inputs_list)
+        output_execution_paths = torch.cat(best_scan_outputs_list)
+        best_inputs = torch.cat(best_tuning_inputs_list)
+        best_objective = torch.cat(best_objective_list)
+        solution_center = best_inputs.mean(dim=0)
+        solution_entropy = float(torch.log(best_inputs.std(dim=0) ** 2).sum())
+
+        algorithm_result = OptimizationAlgorithmResult(
+            best_inputs=best_inputs.detach(),
+            best_objective=best_objective.detach(),
+            input_execution_paths=input_execution_paths.detach(),
+            output_execution_paths=output_execution_paths.detach(),
+            solution_center=solution_center.detach(),
+            solution_entropy=solution_entropy,
         )
-        self.results = {}
-        self.results["best_inputs"] = best_inputs
-        self.results["best_emit"] = best_emit
-        self.results["best_bmag"] = best_bmag
-        self.results["sample_functions_list"] = sample_functions_list
 
-        return best_meas_scan_inputs, best_meas_scan_outputs, {}
+        return algorithm_result
 
     def draw_sample_functions_list(self, model):
         sample_funcs_list = []

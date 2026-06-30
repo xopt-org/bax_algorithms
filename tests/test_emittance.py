@@ -106,7 +106,7 @@ class TestEmittanceBax:
             reference_point=self.reference_point,
             n_grid=100,
             n_samples=100,
-            result_keys=["objective", "emit_x", "emit_y", "bmag_x", "bmag_y"],
+            result_keys=["objective", "emittance_x", "emittance_y", "bmag_x", "bmag_y"],
         )
 
     def test_visualize_virtual_measurement_result_2d(self):
@@ -116,5 +116,5 @@ class TestEmittanceBax:
             reference_point=self.reference_point,
             n_grid=10,
             n_samples=100,
-            result_keys=["objective", "emit_x", "emit_y", "bmag_x", "bmag_y"],
+            result_keys=["objective", "emittance_x", "emittance_y", "bmag_x", "bmag_y"],
         )

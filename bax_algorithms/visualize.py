@@ -1,3 +1,5 @@
+import os
+import pickle
 import torch
 from matplotlib import pyplot as plt
 from typing import List
@@ -16,6 +18,7 @@ def visualize_virtual_measurement_result(
     reference_point: dict = None,
     n_grid: int = 11,
     n_samples: int = 100,
+    show_observations: bool = False,
     kwargs: dict = None,
     result_keys: List[str] = ["objective"],
 ) -> tuple:
@@ -41,11 +44,15 @@ def visualize_virtual_measurement_result(
         Number of grid points per dimension used to display the model predictions.
     n_samples : int, optional
         Number of virtual measurement samples to evaluate for each point in the scan.
+    show_observations: bool, optional
+        Whether to add a scatter plot of the real observations ("partial measurements", i.e. training data)
+        to the virtual objective plots.
     kwargs : dict, optional
         Additional keyword arguments for evaluating the virtual measurement.
 
     Returns:
     --------
+    fig, ax
         The matplotlib figure and axes objects.
     """
     vocs, data = generator.vocs, generator.data
@@ -93,7 +100,7 @@ def visualize_virtual_measurement_result(
     kwargs = kwargs if kwargs else {}
     measurement_result = generator.algorithm.perform_virtual_measurement(
         bax_model, x, bounds, tkwargs=tkwargs, n_samples=n_samples, **kwargs
-    )
+    ).model_dump()
 
     # create figure and subplots
     figsize = (4 * dim_x, 3 * len(result_keys))
@@ -129,6 +136,12 @@ def visualize_virtual_measurement_result(
                 alpha=0.5,
                 label="95% C.I.",
             )
+            if show_observations:
+                x_obs = generator.data[variable_names[0]].to_numpy()
+                label = "Partial Measurements"
+                for val in x_obs:
+                    ax_i.axvline(val, ymax=0.1, c="C1", label=label)
+                    label = None
             ax_i.legend()
             ax_i.set_ylabel(key)
             ax_i.set_xlabel(variable_names[0])
@@ -160,6 +173,12 @@ def visualize_virtual_measurement_result(
                     rasterized=True,
                 )
 
+                if show_observations:
+                    x_obs = generator.data[variable_names].to_numpy()
+                    label = "Partial Measurements"
+                    ax_ij.scatter(x=x_obs[:, 0], y=x_obs[:, 1], c="C1", label=label)
+                    ax_ij.legend()
+
                 from mpl_toolkits.axes_grid1 import make_axes_locatable  # lazy import
 
                 divider = make_axes_locatable(ax_ij)
@@ -171,4 +190,154 @@ def visualize_virtual_measurement_result(
                 cbar.set_label(cbar_label)
 
     fig.tight_layout()
+    return fig, ax
+
+
+def plot_bax_objective_convergence(
+    generator: BaxGenerator,
+) -> tuple:
+    """
+    Plots the algorithm sample objective optimization results from each step of BAX.
+
+    Parameters
+    ----------
+    generator : BaxGenerator
+
+    Returns:
+    --------
+    fig, ax
+        The matplotlib figure and axes objects.
+    """
+    file_prefix = os.path.basename(generator.algorithm_results_file) + "_"
+    file_ext = ".pkl"
+    prefix_len = len(file_prefix)
+    ext_len = len(file_ext)
+    directory = os.path.dirname(os.path.abspath(generator.algorithm_results_file))
+    file_names = [
+        file_name
+        for file_name in os.listdir(directory)
+        if file_name.startswith(file_prefix)
+    ]
+    file_names = sorted(file_names, key=lambda x: int(x[prefix_len:-ext_len]))
+    file_paths = [os.path.abspath(file_name) for file_name in file_names]
+
+    results_dicts = []
+    aggregated_results_dict = {}
+    for file_path in file_paths:
+        with open(file_path, "rb") as fpath:
+            loaded_dict = pickle.load(fpath)
+        results_dicts += [loaded_dict]
+    aggregated_results_dict["best_objective"] = torch.stack(
+        [res["best_objective"] for res in results_dicts]
+    )
+
+    # plot the sample objective optima
+    objs = aggregated_results_dict["best_objective"].squeeze(-1).squeeze(-1)
+    iters = range(objs.shape[0])
+    med = objs.quantile(0.5, dim=1).detach()
+    upper = objs.quantile(0.975, dim=1).detach()
+    lower = objs.quantile(0.025, dim=1).detach()
+
+    fig, ax = plt.subplots(1, 1)
+    ax.set_title("BAX Solutions: Objective")
+    ax.plot(iters, med, label="median")
+    ax.fill_between(iters, lower, upper, alpha=0.5, label="95% C.I.")
+    ax.legend(loc="upper left")
+    ax.set_xlabel("iteration")
+    ax.set_ylabel("Objective")
+
+    fig.set_size_inches(6, 3)
+    fig.tight_layout()
+
+    return fig, ax
+
+
+def plot_bax_input_convergence(
+    generator: BaxGenerator,
+) -> tuple:
+    """
+    Plots the algorithm sample input optimization results from each step of BAX.
+
+    Parameters
+    ----------
+    generator : BaxGenerator
+
+    Returns:
+    --------
+    fig, ax
+        The matplotlib figure and axes objects.
+    """
+    file_prefix = os.path.basename(generator.algorithm_results_file) + "_"
+    file_ext = ".pkl"
+    prefix_len = len(file_prefix)
+    ext_len = len(file_ext)
+    directory = os.path.dirname(os.path.abspath(generator.algorithm_results_file))
+    file_names = [
+        file_name
+        for file_name in os.listdir(directory)
+        if file_name.startswith(file_prefix)
+    ]
+    file_names = sorted(file_names, key=lambda x: int(x[prefix_len:-ext_len]))
+    file_paths = [os.path.abspath(file_name) for file_name in file_names]
+
+    results_dicts = []
+    aggregated_results_dict = {}
+    for file_path in file_paths:
+        with open(file_path, "rb") as fpath:
+            loaded_dict = pickle.load(fpath)
+        results_dicts += [loaded_dict]
+    aggregated_results_dict["best_inputs"] = torch.stack(
+        [res["best_inputs"] for res in results_dicts]
+    )
+
+    # plot the sample input optima
+    solutions = aggregated_results_dict["best_inputs"]
+    solutions = solutions.squeeze(-2)
+    iters = range(solutions.shape[0])
+    if hasattr(generator.algorithm, "_get_optimization_indeces") and callable(
+        getattr(generator.algorithm, "_get_optimization_indeces")
+    ):
+        variable_indeces = generator.algorithm._get_optimization_indeces(
+            generator._get_optimization_bounds()
+        )
+        ndim = len(variable_indeces)
+    else:
+        ndim = solutions.shape[-1]
+        variable_indeces = range(ndim)
+    fig, ax = plt.subplots(ndim, 1, sharex=True)
+    if ndim == 1:
+        ax = [ax]
+    for i, j in enumerate(variable_indeces):
+        med = solutions[..., i].quantile(0.5, dim=1)
+        upper = solutions[..., i].quantile(0.975, dim=1)
+        lower = solutions[..., i].quantile(0.025, dim=1)
+        ax_i = ax[i]
+        if i == 0:
+            ax_i.set_title("BAX Solutions: Input(s)")
+        ax_i.plot(iters, med, label="median")
+        ax_i.fill_between(iters, lower, upper, alpha=0.5, label="95% C.I.")
+        var_name = list(generator.vocs.variables.keys())[j]
+        bbox = dict(
+            boxstyle="round,pad=0.5",
+            facecolor="lightgray",
+            edgecolor="silver",
+            alpha=0.7,
+        )
+        ax_i.text(
+            0.0275,
+            0.06,
+            var_name,
+            transform=ax_i.transAxes,
+            fontsize=12,
+            verticalalignment="bottom",
+            horizontalalignment="left",
+            bbox=bbox,
+        )
+        ax_i.set_ylim(generator.vocs.variables[var_name].domain)
+        ax_i.legend(loc="upper left")
+    ax_i.set_xlabel("iteration")
+
+    fig.set_size_inches(6, 3 * ndim)
+    fig.tight_layout()
+
     return fig, ax

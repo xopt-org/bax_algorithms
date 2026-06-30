@@ -3,9 +3,23 @@ from torch import Tensor
 from botorch.models.model import Model
 from pydantic import Field, PositiveInt
 from bax_algorithms.pathwise.base import PathwiseOptimization
+from xopt.generators.bayesian.bax.algorithms import (
+    OptimizationAlgorithmResult,
+    VirtualMeasurementResult,
+)
+
+
+class VirtualAlignmentMeasurementResult(VirtualMeasurementResult):
+    misalignment_x: Tensor = Field(
+        description="The misalignment in the x transverse dimension."
+    )
+    misalignment_y: Tensor = Field(
+        description="The misalignment in the y transverse dimension."
+    )
 
 
 class PathwiseSolenoidAlignment(PathwiseOptimization):
+    name: str = Field("PathwiseSolenoidAlignment", frozen=True)
     x_key: str = Field(
         None,
         description="key designating the centroid position in x from evaluate function",
@@ -20,9 +34,6 @@ class PathwiseSolenoidAlignment(PathwiseOptimization):
     )
     n_steps_measurement_param: int = Field(
         3, description="number of steps to use in the virtual measurement scans"
-    )
-    results: dict = Field(
-        {}, description="Dictionary to store results from emittance calculcation"
     )
     n_batch: PositiveInt = Field(
         1,
@@ -56,7 +67,7 @@ class PathwiseSolenoidAlignment(PathwiseOptimization):
                     at which to evaluate the objective.
             bounds: tensor shape (2, n_dim) specifying the upper and lower measurement bounds
         returns:
-            result: dict containing measurement results
+            VirtualAlignmentMeasurementResult
         """
         tuning_idxs = torch.arange(bounds.shape[1])
         tuning_idxs = tuning_idxs[
@@ -74,12 +85,16 @@ class PathwiseSolenoidAlignment(PathwiseOptimization):
         )
 
         # store virtual measurement results
-        result = {}
-        result["misalignment_x"] = misalignment[..., self.x_idx]
-        result["misalignment_y"] = misalignment[..., self.y_idx]
-        result["objective"] = result["misalignment_x"] + result["misalignment_y"]
+        misalignment_x = misalignment[..., self.x_idx]
+        misalignment_y = misalignment[..., self.y_idx]
+        objective = misalignment_x + misalignment_y
+        virtual_alignment_result = VirtualAlignmentMeasurementResult(
+            objective=objective,
+            misalignment_x=misalignment_x,
+            misalignment_y=misalignment_y,
+        )
 
-        return result
+        return virtual_alignment_result
 
     def get_meas_scan_inputs(
         self, x_tuning: Tensor, bounds: Tensor, tkwargs: dict = None
@@ -173,19 +188,21 @@ class PathwiseSolenoidAlignment(PathwiseOptimization):
 
         return misalignment
 
-    def get_execution_paths(self, model: Model, bounds: Tensor) -> Tensor:
-        best_inputs_list = []
+    def execute(self, model: Model, bounds: Tensor) -> Tensor:
+        best_tuning_inputs_list = []
         best_objective_list = []
-        best_misalignment_list = []
         best_scan_inputs_list = []
         best_scan_outputs_list = []
-
         for i in range(self.n_batch):
             # draw callable sample functions
             sample_functions_list = self.draw_sample_functions_list(model)
 
-            best_inputs = self.execute_algorithm(sample_functions_list, bounds)
-            best_meas_scan_inputs = self.get_meas_scan_inputs(best_inputs, bounds)
+            best_tuning_inputs = self.optimize_samples_funcs_list(
+                sample_functions_list, bounds
+            )
+            best_meas_scan_inputs = self.get_meas_scan_inputs(
+                best_tuning_inputs, bounds
+            )
             scan_outputs = [
                 sample_func(best_meas_scan_inputs).unsqueeze(-1)
                 for sample_func in sample_functions_list
@@ -194,27 +211,28 @@ class PathwiseSolenoidAlignment(PathwiseOptimization):
             best_result = self.perform_virtual_measurement(
                 sample_functions_list, best_meas_scan_inputs[:, :1, :], bounds
             )
-            best_misalignment = self.evaluate_posterior_misalignment(
-                sample_functions_list, best_inputs, bounds
-            )
-            best_inputs_list += [best_inputs]
-            best_objective_list += [best_result["objective"]]
-            best_misalignment_list += [best_misalignment]
+            best_tuning_inputs_list += [best_tuning_inputs]
+            best_objective_list += [best_result.objective]
             best_scan_inputs_list += [best_meas_scan_inputs]
             best_scan_outputs_list += [best_meas_scan_outputs]
 
-        self.results = {}
-        self.results["best_inputs"] = torch.cat(best_inputs_list)
-        self.results["best_objective"] = torch.cat(best_objective_list)
-        self.results["best_misalignment"] = torch.cat(best_misalignment_list)
-        self.results["best_meas_scan_inputs"] = torch.cat(best_scan_inputs_list)
-        self.results["best_meas_scan_outputs"] = torch.cat(best_scan_outputs_list)
+        input_execution_paths = torch.cat(best_scan_inputs_list)
+        output_execution_paths = torch.cat(best_scan_outputs_list)
+        best_inputs = torch.cat(best_tuning_inputs_list)
+        best_objective = torch.cat(best_objective_list)
+        solution_center = best_inputs.mean(dim=0)
+        solution_entropy = float(torch.log(best_inputs.std(dim=0) ** 2).sum())
 
-        return (
-            self.results["best_meas_scan_inputs"],
-            self.results["best_meas_scan_outputs"],
-            {},
+        algorithm_result = OptimizationAlgorithmResult(
+            best_inputs=best_inputs.detach(),
+            best_objective=best_objective.detach(),
+            input_execution_paths=input_execution_paths.detach(),
+            output_execution_paths=output_execution_paths.detach(),
+            solution_center=solution_center.detach(),
+            solution_entropy=solution_entropy,
         )
+
+        return algorithm_result
 
     def _get_optimization_indeces(self, bounds) -> Tensor:
         """
