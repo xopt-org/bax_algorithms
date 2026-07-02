@@ -1,11 +1,17 @@
-from xopt.generators.bayesian.bax_generator import BaxGenerator
+from collections.abc import Callable
+from typing import Any
+
+import torch
 from botorch.models.gp_regression import SingleTaskGP
 from botorch.models.model_list_gp_regression import ModelListGP
+from xopt.generators.bayesian.bax_generator import BaxGenerator
+
 from bax_algorithms.pathwise.optimize import VirtualOptimizer
-import torch
 
 
-def get_bax_model_and_bounds(generator: BaxGenerator):
+def get_bax_model_and_bounds(
+    generator: BaxGenerator,
+) -> tuple[ModelListGP, torch.Tensor]:
     bax_model_ids = [
         generator.vocs.output_names.index(name)
         for name in generator.algorithm.observable_names_ordered
@@ -19,11 +25,13 @@ def get_bax_model_and_bounds(generator: BaxGenerator):
     return bax_model, generator._get_optimization_bounds()
 
 
-def get_bax_mean_prediction(generator: BaxGenerator, mean_optimizer: VirtualOptimizer):
+def get_bax_mean_prediction(
+    generator: BaxGenerator, mean_optimizer: VirtualOptimizer
+) -> torch.Tensor:
     model, bounds = get_bax_model_and_bounds(generator)
 
-    def get_mean_function(model):
-        def func(x):
+    def get_mean_function(model: ModelListGP) -> Callable[[torch.Tensor], torch.Tensor]:
+        def func(x: torch.Tensor) -> torch.Tensor:
             gp_mean = model.posterior(x).mean
             return gp_mean
 
@@ -45,7 +53,9 @@ def get_bax_mean_prediction(generator: BaxGenerator, mean_optimizer: VirtualOpti
     return best_inputs.squeeze(0)
 
 
-def tuning_input_tensor_to_dict(generator, x_tuning):
+def tuning_input_tensor_to_dict(
+    generator: BaxGenerator, x_tuning: torch.Tensor
+) -> dict[str, Any]:
     """
     Converts a single set of tuning parameters to a dictionary for input to Xopt
 
@@ -62,7 +72,9 @@ def tuning_input_tensor_to_dict(generator, x_tuning):
     return x_tuning_dict
 
 
-def uniform_random_sample_in_bounds(n_samples, bounds):
+def uniform_random_sample_in_bounds(
+    n_samples: int, bounds: torch.Tensor
+) -> torch.Tensor:
     ndim = len(bounds.T)
 
     # uniform sample, rescaled, and shifted to cover the domain
