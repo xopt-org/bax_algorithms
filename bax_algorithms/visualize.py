@@ -1,13 +1,15 @@
 import os
 import pickle
+from typing import List
+
 import torch
 from matplotlib import pyplot as plt
-from typing import List
+from xopt.generators.bayesian.bax_generator import BaxGenerator
 from xopt.generators.bayesian.visualize import (
     _generate_input_mesh,
     _get_reference_point,
 )
-from xopt.generators.bayesian.bax_generator import BaxGenerator
+
 from bax_algorithms.utils import get_bax_model_and_bounds
 
 
@@ -219,7 +221,7 @@ def plot_bax_objective_convergence(
         if file_name.startswith(file_prefix)
     ]
     file_names = sorted(file_names, key=lambda x: int(x[prefix_len:-ext_len]))
-    file_paths = [os.path.abspath(file_name) for file_name in file_names]
+    file_paths = [os.path.join(directory, file_name) for file_name in file_names]
 
     results_dicts = []
     aggregated_results_dict = {}
@@ -278,7 +280,7 @@ def plot_bax_input_convergence(
         if file_name.startswith(file_prefix)
     ]
     file_names = sorted(file_names, key=lambda x: int(x[prefix_len:-ext_len]))
-    file_paths = [os.path.abspath(file_name) for file_name in file_names]
+    file_paths = [os.path.join(directory, file_name) for file_name in file_names]
 
     results_dicts = []
     aggregated_results_dict = {}
