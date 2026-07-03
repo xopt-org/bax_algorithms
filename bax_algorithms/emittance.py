@@ -1,22 +1,22 @@
-from pydantic import Field, PositiveInt
-from typing import Optional
-import torch
-from torch import Tensor
+import importlib.util
+from typing import Any, Callable, Optional
 
-from gpytorch.kernels.rbf_kernel import RBFKernel
-from bax_algorithms.pathwise.base import PathwiseOptimization
-from bax_algorithms.pathwise.sampling import draw_product_kernel_post_paths
-from botorch.sampling.pathwise.posterior_samplers import draw_matheron_paths
+import numpy as np
+import torch
 from botorch.models.model import Model
+from botorch.sampling.pathwise.posterior_samplers import draw_matheron_paths
+from gpytorch.kernels.rbf_kernel import RBFKernel
+from pydantic import Field, PositiveInt
+from scipy.optimize import minimize
+from torch import Tensor
 from xopt.generators.bayesian.bax.algorithms import (
     Algorithm,
     OptimizationAlgorithmResult,
     VirtualMeasurementResult,
 )
 
-import numpy as np
-from scipy.optimize import minimize
-import importlib.util
+from bax_algorithms.pathwise.base import PathwiseOptimization
+from bax_algorithms.pathwise.sampling import draw_product_kernel_post_paths
 
 
 def bmag_func(bb, ab, bl, al):
@@ -461,34 +461,35 @@ class VirtualEmittanceMeasurementResult(VirtualMeasurementResult):
 
 
 class EmittanceAlgorithm(Algorithm):
+    name: str = Field(default="emittance", frozen=True)
     x_key: str = Field(
-        None,
+        "",
         description="key designating the beamsize squared output in x from evaluate function",
     )
     y_key: str = Field(
-        None,
+        "",
         description="key designating the beamsize squared output in y from evaluate function",
     )
     energy: float = Field(1.0, description="Beam energy in [eV]")
     q_len: float = Field(
-        description="the longitudinal thickness of the measurement quadrupole"
+        0.0, description="the longitudinal thickness of the measurement quadrupole"
     )
-    rmat_x: Tensor = Field(
+    rmat_x: Tensor | None = Field(
         None, description="tensor shape 2x2 containing downstream rmat for x dimension"
     )
-    rmat_y: Tensor = Field(
+    rmat_y: Tensor | None = Field(
         None, description="tensor shape 2x2 containing downstream rmat for y dimension"
     )
-    twiss0_x: Tensor = Field(
+    twiss0_x: Tensor | None = Field(
         None,
         description="1d tensor length 2 containing design x-twiss: [beta0_x, alpha0_x] (for bmag)",
     )
-    twiss0_y: Tensor = Field(
+    twiss0_y: Tensor | None = Field(
         None,
         description="1d tensor length 2 containing design y-twiss: [beta0_y, alpha0_y] (for bmag)",
     )
     meas_dim: int = Field(
-        None,
+        0,
         description="index identifying the measurement quad dimension in the model",
     )
     n_steps_measurement_param: int = Field(
@@ -502,7 +503,7 @@ class EmittanceAlgorithm(Algorithm):
         True,
         description="Whether to multiply the emit by the bmag to get virtual objective.",
     )
-    results: dict = Field(
+    results: dict[str, Any] = Field(
         {}, description="Dictionary to store results from emittance calculcation"
     )
     maxiter_fit: int = Field(
@@ -530,8 +531,13 @@ class EmittanceAlgorithm(Algorithm):
         return self.observable_names_ordered.index(self.y_key)
 
     def perform_virtual_measurement(
-        self, model, x, bounds, tkwargs: dict = None, n_samples: int = None
-    ):
+        self,
+        model: Model,
+        x: Tensor,
+        bounds: Tensor,
+        n_samples: int | None = None,
+        tkwargs: dict[str, Any] | None = None,
+    ) -> VirtualEmittanceMeasurementResult:
         """
         inputs:
             model: a botorch ModelListGP
@@ -600,7 +606,7 @@ class EmittanceAlgorithm(Algorithm):
 
     def get_meas_scan_inputs(
         self, x_tuning: Tensor, bounds: Tensor, tkwargs: dict = None
-    ):
+    ) -> Tensor:
         """
         A function that generates the inputs for virtual emittance measurement scans at the tuning
         configurations specified by x_tuning.
@@ -649,8 +655,13 @@ class EmittanceAlgorithm(Algorithm):
         return x
 
     def evaluate_posterior_emittance(
-        self, model, x_tuning, bounds, tkwargs: dict = None, n_samples: int = None
-    ):
+        self,
+        model: Model,
+        x_tuning: Tensor,
+        bounds: Tensor,
+        tkwargs: dict[str, Any] | None = None,
+        n_samples: int | None = None,
+    ) -> tuple[Tensor, Tensor]:
         """
         inputs:
             x_tuning: tensor shape n_points x (n_dim-1) specifying points in the **tuning** space
@@ -795,7 +806,7 @@ class PathwiseMinimizeEmittance(EmittanceAlgorithm, PathwiseOptimization):
         description="Number of sample batches to optimize, with each batch containing self.n_samples",
     )
 
-    def execute(self, model: Model, bounds: Tensor) -> Tensor:
+    def execute(self, model: Model, bounds: Tensor) -> OptimizationAlgorithmResult:
         best_tuning_inputs_list = []
         best_objective_list = []
         best_scan_inputs_list = []
@@ -842,8 +853,8 @@ class PathwiseMinimizeEmittance(EmittanceAlgorithm, PathwiseOptimization):
 
         return algorithm_result
 
-    def draw_sample_functions_list(self, model):
-        sample_funcs_list = []
+    def draw_sample_functions_list(self, model: Model) -> list[Callable[..., Any]]:
+        sample_funcs_list: list[Callable[..., Any]] = []
         for m in model.models:
             if isinstance(model.models[0].covar_module, RBFKernel):
                 sample_funcs = draw_matheron_paths(
@@ -856,7 +867,7 @@ class PathwiseMinimizeEmittance(EmittanceAlgorithm, PathwiseOptimization):
             sample_funcs_list += [sample_funcs]
         return sample_funcs_list
 
-    def _get_optimization_indeces(self, bounds) -> Tensor:
+    def _get_optimization_indeces(self, bounds: Tensor) -> Tensor:
         """
         Get indeces specifying parameters for virtual objective optimization.
         """

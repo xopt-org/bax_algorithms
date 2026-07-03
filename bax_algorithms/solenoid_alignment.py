@@ -1,12 +1,13 @@
 import torch
-from torch import Tensor
 from botorch.models.model import Model
 from pydantic import Field, PositiveInt
-from bax_algorithms.pathwise.base import PathwiseOptimization
+from torch import Tensor
 from xopt.generators.bayesian.bax.algorithms import (
     OptimizationAlgorithmResult,
     VirtualMeasurementResult,
 )
+
+from bax_algorithms.pathwise.base import PathwiseOptimization
 
 
 class VirtualAlignmentMeasurementResult(VirtualMeasurementResult):
@@ -19,13 +20,13 @@ class VirtualAlignmentMeasurementResult(VirtualMeasurementResult):
 
 
 class PathwiseSolenoidAlignment(PathwiseOptimization):
-    name: str = Field("PathwiseSolenoidAlignment", frozen=True)
+    name: str = Field("pathwise_solenoid_alignment", frozen=True)
     x_key: str = Field(
-        None,
+        "",
         description="key designating the centroid position in x from evaluate function",
     )
     y_key: str = Field(
-        None,
+        "",
         description="key designating the centroid poisition in y from evaluate function",
     )
     meas_dim: int = Field(

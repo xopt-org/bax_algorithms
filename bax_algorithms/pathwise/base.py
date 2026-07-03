@@ -1,15 +1,17 @@
 # to be added to basic algorithms in Xopt
 
 from abc import abstractmethod
-from bax_algorithms.pathwise.optimize import VirtualOptimizer, DifferentialEvolution
+from collections.abc import Callable
+from typing import List
+
+import torch
 from botorch.models.model import Model, ModelList
 from botorch.sampling.pathwise.posterior_samplers import draw_matheron_paths
 from pydantic import Field
-from xopt.generators.bayesian.bax.algorithms import Algorithm
 from torch import Tensor
-import torch
-from typing import List
-from collections.abc import Callable
+from xopt.generators.bayesian.bax.algorithms import Algorithm
+
+from bax_algorithms.pathwise.optimize import DifferentialEvolution, VirtualOptimizer
 
 
 class PathwiseOptimization(Algorithm):
@@ -39,7 +41,7 @@ class PathwiseOptimization(Algorithm):
         Get the bounds for virtual optimization.
     """
 
-    name = "pathwise_optimization"
+    name: str = Field("pathwise_optimization", frozen=True)
     optimizer: VirtualOptimizer = Field(
         DifferentialEvolution(), description="Optimizer for virtual objective."
     )
