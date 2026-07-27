@@ -99,7 +99,7 @@ def visualize_virtual_measurement_result(
     # get virtual measurement (sample) results
     kwargs = kwargs if kwargs else {}
     measurement_result = generator.algorithm.perform_virtual_measurement(
-        bax_model, x, bounds, tkwargs=tkwargs, n_samples=n_samples, **kwargs
+        bax_model, x, bounds, n_samples=n_samples, **kwargs
     ).model_dump()
 
     # create figure and subplots

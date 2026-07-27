@@ -1,5 +1,5 @@
 from pydantic import Field, PositiveInt
-from typing import Optional
+from typing import List, Optional
 import torch
 from torch import Tensor
 
@@ -461,38 +461,40 @@ class VirtualEmittanceMeasurementResult(VirtualMeasurementResult):
 
 
 class EmittanceAlgorithm(Algorithm):
-    x_key: str = Field(
+    name: str = Field("minimize_emittance", frozen=True)
+    x_key: str | None = Field(
         None,
         description="key designating the beamsize squared output in x from evaluate function",
     )
-    y_key: str = Field(
+    y_key: str | None= Field(
         None,
         description="key designating the beamsize squared output in y from evaluate function",
     )
     energy: float = Field(1.0, description="Beam energy in [eV]")
     q_len: float = Field(
+        0.08,
         description="the longitudinal thickness of the measurement quadrupole"
     )
-    rmat_x: Tensor = Field(
-        None, description="tensor shape 2x2 containing downstream rmat for x dimension"
+    rmat_x: List[float] | None = Field(
+        [1.0, 1.0, 0.0, 1.0], description="List length 4 containing downstream rmat for x dimension"
     )
-    rmat_y: Tensor = Field(
-        None, description="tensor shape 2x2 containing downstream rmat for y dimension"
+    rmat_y: List[float] | None = Field(
+        [1.0, 1.0, 0.0, 1.0], description="List length 4 containing downstream rmat for y dimension"
     )
-    twiss0_x: Tensor = Field(
-        None,
-        description="1d tensor length 2 containing design x-twiss: [beta0_x, alpha0_x] (for bmag)",
+    twiss0_x: List[float] | None = Field(
+        [1.0, 0.0],
+        description="List length 2 containing design x-twiss: [beta0_x, alpha0_x] (for bmag)",
     )
-    twiss0_y: Tensor = Field(
-        None,
-        description="1d tensor length 2 containing design y-twiss: [beta0_y, alpha0_y] (for bmag)",
+    twiss0_y: List[float] | None = Field(
+        [1.0, 0.0],
+        description="List length 2 containing design y-twiss: [beta0_y, alpha0_y] (for bmag)",
     )
     meas_dim: int = Field(
-        None,
+        0,
         description="index identifying the measurement quad dimension in the model",
     )
     n_steps_measurement_param: int = Field(
-        3, description="number of steps to use in the virtual measurement scans"
+        5, description="number of steps to use in the virtual measurement scans"
     )
     thin_lens: bool = Field(
         False,
@@ -502,9 +504,6 @@ class EmittanceAlgorithm(Algorithm):
         True,
         description="Whether to multiply the emit by the bmag to get virtual objective.",
     )
-    results: dict = Field(
-        {}, description="Dictionary to store results from emittance calculcation"
-    )
     maxiter_fit: int = Field(
         20, description="Maximum number of iterations in nonlinear emittance fitting."
     )
@@ -512,6 +511,13 @@ class EmittanceAlgorithm(Algorithm):
         False,
         description="Whether to retain beamsize values only around the minimum from each scan.",
     )
+
+
+    def model_post_init(self, __context):
+        self.rmat_x = torch.tensor(self.rmat_x, dtype=torch.double)
+        self.rmat_y = torch.tensor(self.rmat_y, dtype=torch.double)
+        self.twiss0_x = torch.tensor(self.twiss0_x, dtype=torch.double)
+        self.twiss0_y = torch.tensor(self.twiss0_y, dtype=torch.double)
 
     @property
     def x_idx(self) -> int:
@@ -790,6 +796,7 @@ class EmittanceAlgorithm(Algorithm):
 
 
 class PathwiseMinimizeEmittance(EmittanceAlgorithm, PathwiseOptimization):
+    name: str = Field("pathwise_minimize_emittance", frozen=True)
     n_batch: PositiveInt = Field(
         1,
         description="Number of sample batches to optimize, with each batch containing self.n_samples",
