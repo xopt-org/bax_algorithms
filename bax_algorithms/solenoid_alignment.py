@@ -19,7 +19,7 @@ class VirtualAlignmentMeasurementResult(VirtualMeasurementResult):
 
 
 class PathwiseSolenoidAlignment(PathwiseOptimization):
-    name: str = Field("PathwiseSolenoidAlignment", frozen=True)
+    name: str = Field("pathwise_solenoid_alignment", frozen=True)
     x_key: str | None= Field(
         None,
         description="key designating the centroid position in x from evaluate function",
@@ -28,7 +28,7 @@ class PathwiseSolenoidAlignment(PathwiseOptimization):
         None,
         description="key designating the centroid poisition in y from evaluate function",
     )
-    meas_dim: int | None= Field(
+    meas_dim: int | None = Field(
         None,
         description="index identifying the measurement quad dimension in the model",
     )
