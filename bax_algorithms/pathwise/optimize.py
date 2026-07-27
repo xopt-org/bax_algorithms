@@ -31,6 +31,7 @@ class VirtualOptimizer(XoptBaseModel, ABC):
         """
         Minimizes virtual objective sample functions and returns optimal inputs.
         """
+        raise NotImplementedError("This method should be implemented in subclasses.")
 
     @abstractmethod
     def _wrap_virtual_objective(
@@ -44,6 +45,7 @@ class VirtualOptimizer(XoptBaseModel, ABC):
         """
         Wraps virtual objective function so inputs/outputs are suitable for optimization method.
         """
+        raise NotImplementedError("This method should be implemented in subclasses.")
 
     @abstractmethod
     def _get_virtual_optimization_bounds(
@@ -52,6 +54,7 @@ class VirtualOptimizer(XoptBaseModel, ABC):
         """
         Get bounds for virtual optimization (may not be the same as bounds passed to optimizer).
         """
+        raise NotImplementedError("This method should be implemented in subclasses.")
 
     def _get_target_function(
         self,
