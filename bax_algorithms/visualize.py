@@ -91,7 +91,7 @@ def visualize_virtual_measurement_result(
             f"which are not in generator.vocs.variable_names."
         )
     tkwargs = generator.tkwargs
-    x = _generate_input_mesh(vocs, variable_names, reference_point, n_grid, tkwargs)
+    x = _generate_input_mesh(vocs, variable_names, data, reference_point, n_grid, tkwargs)
 
     # get bax observable models and bounds
     bax_model, bounds = get_bax_model_and_bounds(generator)
@@ -219,7 +219,7 @@ def plot_bax_objective_convergence(
         if file_name.startswith(file_prefix)
     ]
     file_names = sorted(file_names, key=lambda x: int(x[prefix_len:-ext_len]))
-    file_paths = [os.path.abspath(file_name) for file_name in file_names]
+    file_paths = [os.path.join(directory, file_name) for file_name in file_names]
 
     results_dicts = []
     aggregated_results_dict = {}
@@ -278,7 +278,7 @@ def plot_bax_input_convergence(
         if file_name.startswith(file_prefix)
     ]
     file_names = sorted(file_names, key=lambda x: int(x[prefix_len:-ext_len]))
-    file_paths = [os.path.abspath(file_name) for file_name in file_names]
+    file_paths = [os.path.join(directory, file_name) for file_name in file_names]
 
     results_dicts = []
     aggregated_results_dict = {}

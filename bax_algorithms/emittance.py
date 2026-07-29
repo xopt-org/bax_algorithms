@@ -1,5 +1,6 @@
-from pydantic import Field, PositiveInt
-from typing import List, Optional
+from pydantic import Field, PositiveInt, field_validator, field_serializer
+from typing import List, Optional, Any
+import ast
 import torch
 from torch import Tensor
 
@@ -466,27 +467,29 @@ class EmittanceAlgorithm(Algorithm):
         None,
         description="key designating the beamsize squared output in x from evaluate function",
     )
-    y_key: str | None= Field(
+
+    y_key: str | None = Field(
         None,
         description="key designating the beamsize squared output in y from evaluate function",
     )
     energy: float = Field(1.0, description="Beam energy in [eV]")
     q_len: float = Field(
-        0.08,
-        description="the longitudinal thickness of the measurement quadrupole"
+        0.08, description="the longitudinal thickness of the measurement quadrupole"
     )
-    rmat_x: List[float] | None = Field(
-        [1.0, 1.0, 0.0, 1.0], description="List length 4 containing downstream rmat for x dimension"
+    rmat_x: Tensor | None = Field(
+        Tensor([[1.0, 1.0], [0.0, 1.0]]),
+        description="2x2 Tensor containing downstream rmat for x dimension",
     )
-    rmat_y: List[float] | None = Field(
-        [1.0, 1.0, 0.0, 1.0], description="List length 4 containing downstream rmat for y dimension"
+    rmat_y: Tensor | None = Field(
+        Tensor([[1.0, 1.0], [0.0, 1.0]]),
+        description="2x2 Tensor containing downstream rmat for y dimension",
     )
-    twiss0_x: List[float] | None = Field(
-        [1.0, 0.0],
+    twiss0_x: Tensor | None = Field(
+        Tensor([1.0, 0.0]),
         description="List length 2 containing design x-twiss: [beta0_x, alpha0_x] (for bmag)",
     )
-    twiss0_y: List[float] | None = Field(
-        [1.0, 0.0],
+    twiss0_y: Tensor | None = Field(
+        Tensor([1.0, 0.0]),
         description="List length 2 containing design y-twiss: [beta0_y, alpha0_y] (for bmag)",
     )
     meas_dim: int = Field(
@@ -512,12 +515,40 @@ class EmittanceAlgorithm(Algorithm):
         description="Whether to retain beamsize values only around the minimum from each scan.",
     )
 
+    @field_validator("rmat_x", "rmat_y", "twiss0_x", "twiss0_y", mode="before")
+    @classmethod
+    def validate_tensors(cls, v: Any) -> Tensor:
+        """Accept tensors, (possibly nested) lists/tuples, or their string
+        representations (e.g. "[[1.0, 1.0], [0.0, 1.0]]" or "1.0, 0.0") and
+        convert them into a double-precision tensor."""
+        if isinstance(v, Tensor):
+            return v
+        if isinstance(v, str):
+            stripped = v.strip()
+            if stripped.startswith("[") or stripped.startswith("("):
+                v = ast.literal_eval(stripped)
+            else:
+                v = [item for item in stripped.split(",")]
+        if isinstance(v, (list, tuple)):
+            float_list = cls._to_nested_floats(v)
+            return torch.tensor(float_list, dtype=torch.double)
+        raise ValueError(f"Cannot convert {v} to a Tensor.")
 
-    def model_post_init(self, __context):
-        self.rmat_x = torch.tensor(self.rmat_x, dtype=torch.double)
-        self.rmat_y = torch.tensor(self.rmat_y, dtype=torch.double)
-        self.twiss0_x = torch.tensor(self.twiss0_x, dtype=torch.double)
-        self.twiss0_y = torch.tensor(self.twiss0_y, dtype=torch.double)
+    @classmethod
+    def _to_nested_floats(cls, v: Any) -> Any:
+        """Recursively convert a (possibly nested) list/tuple to floats,
+        preserving the nesting structure."""
+        if isinstance(v, (list, tuple)):
+            return [cls._to_nested_floats(item) for item in v]
+        return float(v)
+
+    @field_serializer("rmat_x", "rmat_y", "twiss0_x", "twiss0_y")
+    def serialize_tensor(self, v: Any) -> Any:
+        """Serialize tensor fields to nested lists so they round-trip through
+        JSON/YAML (pydantic otherwise dumps unknown types as ``'torch.Tensor'``)."""
+        if isinstance(v, Tensor):
+            return v.tolist()
+        return v
 
     @property
     def x_idx(self) -> int:
