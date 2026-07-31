@@ -91,7 +91,9 @@ def visualize_virtual_measurement_result(
             f"which are not in generator.vocs.variable_names."
         )
     tkwargs = generator.tkwargs
-    x = _generate_input_mesh(vocs, variable_names, data, reference_point, n_grid, tkwargs)
+    x = _generate_input_mesh(
+        vocs, variable_names, data, reference_point, n_grid, tkwargs
+    )
 
     # get bax observable models and bounds
     bax_model, bounds = get_bax_model_and_bounds(generator)

@@ -20,7 +20,7 @@ class VirtualAlignmentMeasurementResult(VirtualMeasurementResult):
 
 class PathwiseSolenoidAlignment(PathwiseOptimization):
     name: str = Field("pathwise_solenoid_alignment", frozen=True)
-    x_key: str | None= Field(
+    x_key: str | None = Field(
         None,
         description="key designating the centroid position in x from evaluate function",
     )
@@ -95,9 +95,7 @@ class PathwiseSolenoidAlignment(PathwiseOptimization):
 
         return virtual_alignment_result
 
-    def get_meas_scan_inputs(
-        self, x_tuning: Tensor, bounds: Tensor
-    ) -> Tensor:
+    def get_meas_scan_inputs(self, x_tuning: Tensor, bounds: Tensor) -> Tensor:
         """
         A function that generates the inputs for virtual emittance measurement scans at the tuning
         configurations specified by x_tuning.
@@ -145,7 +143,11 @@ class PathwiseSolenoidAlignment(PathwiseOptimization):
         return x
 
     def evaluate_posterior_misalignment(
-        self, model: Model, x_tuning: Tensor, bounds: Tensor, n_samples: int | None = None
+        self,
+        model: Model,
+        x_tuning: Tensor,
+        bounds: Tensor,
+        n_samples: int | None = None,
     ):
         """
         inputs:

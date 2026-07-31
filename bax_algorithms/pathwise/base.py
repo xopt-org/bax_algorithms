@@ -6,7 +6,11 @@ from bax_algorithms.pathwise.optimize import VirtualOptimizer, DifferentialEvolu
 from botorch.models.model import Model, ModelList
 from botorch.sampling.pathwise.posterior_samplers import draw_matheron_paths
 from pydantic import Field, field_validator
-from xopt.generators.bayesian.bax.algorithms import Algorithm, VirtualMeasurementResult, OptimizationAlgorithmResult
+from xopt.generators.bayesian.bax.algorithms import (
+    Algorithm,
+    VirtualMeasurementResult,
+    OptimizationAlgorithmResult,
+)
 from torch import Tensor
 import torch
 from typing import List
@@ -60,7 +64,10 @@ class PathwiseOptimization(Algorithm):
         """
 
         measurement_result = self.perform_virtual_measurement(
-            model, x, bounds, n_samples,
+            model,
+            x,
+            bounds,
+            n_samples,
         )
 
         return measurement_result.objective
