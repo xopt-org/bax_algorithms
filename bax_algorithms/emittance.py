@@ -1,5 +1,5 @@
 from pydantic import Field, PositiveInt, field_validator, field_serializer
-from typing import List, Optional, Any
+from typing import Optional, Any
 import ast
 import torch
 from torch import Tensor

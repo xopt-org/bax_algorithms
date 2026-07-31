@@ -1,15 +1,11 @@
 # to be added to basic algorithms in Xopt
 
-from abc import abstractmethod
-from difflib import Differ
-from bax_algorithms.pathwise.optimize import VirtualOptimizer, DifferentialEvolution
+from bax_algorithms.pathwise.optimize import DifferentialEvolution
 from botorch.models.model import Model, ModelList
 from botorch.sampling.pathwise.posterior_samplers import draw_matheron_paths
-from pydantic import Field, field_validator
+from pydantic import Field
 from xopt.generators.bayesian.bax.algorithms import (
     Algorithm,
-    VirtualMeasurementResult,
-    OptimizationAlgorithmResult,
 )
 from torch import Tensor
 import torch
