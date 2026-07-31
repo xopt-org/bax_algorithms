@@ -1,11 +1,12 @@
 # to be added to basic algorithms in Xopt
 
-from abc import abstractmethod
-from bax_algorithms.pathwise.optimize import VirtualOptimizer, DifferentialEvolution
+from bax_algorithms.pathwise.optimize import DifferentialEvolution
 from botorch.models.model import Model, ModelList
 from botorch.sampling.pathwise.posterior_samplers import draw_matheron_paths
 from pydantic import Field
-from xopt.generators.bayesian.bax.algorithms import Algorithm
+from xopt.generators.bayesian.bax.algorithms import (
+    Algorithm,
+)
 from torch import Tensor
 import torch
 from typing import List
@@ -39,49 +40,30 @@ class PathwiseOptimization(Algorithm):
         Get the bounds for virtual optimization.
     """
 
-    name = "pathwise_optimization"
-    optimizer: VirtualOptimizer = Field(
+    name: str = Field("pathwise_optimization", frozen=True)
+    optimizer: DifferentialEvolution = Field(
         DifferentialEvolution(), description="Optimizer for virtual objective."
     )
-    results: dict = Field(
-        default=None,
-        description="dictionary containing algorithm results",
-    )
     observable_names_ordered: List[str] = Field(
-        default=None,
         description="names of observable models used in this algorithm",
     )
-
-    @abstractmethod
-    def perform_virtual_measurement(
-        self,
-        model: Model,
-        x: Tensor,
-        bounds: Tensor,
-        n_samples: int = None,
-        tkwargs: dict = None,
-    ) -> dict:
-        """
-        Defines how the measurement of the virtual objective should be performed.
-        Stores results in a dictionary.
-        Returned dictionary must contain key 'objective' containing the virtual objective results.
-        """
-        return {"objective": None}
 
     def evaluate_virtual_objective(
         self,
         model: Model,
         x: Tensor,
         bounds: Tensor,
-        n_samples: int = None,
-        tkwargs: dict = None,
+        n_samples: int | None = None,
     ) -> Tensor:
         """
         Performs virtual measurement and extracts virtual objective value from resultant dictionary.
         """
 
         measurement_result = self.perform_virtual_measurement(
-            model, x, bounds, n_samples, tkwargs
+            model,
+            x,
+            bounds,
+            n_samples,
         )
 
         return measurement_result.objective

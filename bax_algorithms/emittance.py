@@ -1,5 +1,6 @@
-from pydantic import Field, PositiveInt
-from typing import Optional
+from pydantic import Field, PositiveInt, field_validator, field_serializer
+from typing import Optional, Any
+import ast
 import torch
 from torch import Tensor
 
@@ -461,38 +462,42 @@ class VirtualEmittanceMeasurementResult(VirtualMeasurementResult):
 
 
 class EmittanceAlgorithm(Algorithm):
-    x_key: str = Field(
+    name: str = Field("minimize_emittance", frozen=True)
+    x_key: str | None = Field(
         None,
         description="key designating the beamsize squared output in x from evaluate function",
     )
-    y_key: str = Field(
+
+    y_key: str | None = Field(
         None,
         description="key designating the beamsize squared output in y from evaluate function",
     )
     energy: float = Field(1.0, description="Beam energy in [eV]")
     q_len: float = Field(
-        description="the longitudinal thickness of the measurement quadrupole"
+        0.08, description="the longitudinal thickness of the measurement quadrupole"
     )
-    rmat_x: Tensor = Field(
-        None, description="tensor shape 2x2 containing downstream rmat for x dimension"
+    rmat_x: Tensor | None = Field(
+        Tensor([[1.0, 1.0], [0.0, 1.0]]),
+        description="2x2 Tensor containing downstream rmat for x dimension",
     )
-    rmat_y: Tensor = Field(
-        None, description="tensor shape 2x2 containing downstream rmat for y dimension"
+    rmat_y: Tensor | None = Field(
+        Tensor([[1.0, 1.0], [0.0, 1.0]]),
+        description="2x2 Tensor containing downstream rmat for y dimension",
     )
-    twiss0_x: Tensor = Field(
-        None,
-        description="1d tensor length 2 containing design x-twiss: [beta0_x, alpha0_x] (for bmag)",
+    twiss0_x: Tensor | None = Field(
+        Tensor([1.0, 0.0]),
+        description="List length 2 containing design x-twiss: [beta0_x, alpha0_x] (for bmag)",
     )
-    twiss0_y: Tensor = Field(
-        None,
-        description="1d tensor length 2 containing design y-twiss: [beta0_y, alpha0_y] (for bmag)",
+    twiss0_y: Tensor | None = Field(
+        Tensor([1.0, 0.0]),
+        description="List length 2 containing design y-twiss: [beta0_y, alpha0_y] (for bmag)",
     )
     meas_dim: int = Field(
-        None,
+        0,
         description="index identifying the measurement quad dimension in the model",
     )
     n_steps_measurement_param: int = Field(
-        3, description="number of steps to use in the virtual measurement scans"
+        5, description="number of steps to use in the virtual measurement scans"
     )
     thin_lens: bool = Field(
         False,
@@ -502,9 +507,6 @@ class EmittanceAlgorithm(Algorithm):
         True,
         description="Whether to multiply the emit by the bmag to get virtual objective.",
     )
-    results: dict = Field(
-        {}, description="Dictionary to store results from emittance calculcation"
-    )
     maxiter_fit: int = Field(
         20, description="Maximum number of iterations in nonlinear emittance fitting."
     )
@@ -512,6 +514,41 @@ class EmittanceAlgorithm(Algorithm):
         False,
         description="Whether to retain beamsize values only around the minimum from each scan.",
     )
+
+    @field_validator("rmat_x", "rmat_y", "twiss0_x", "twiss0_y", mode="before")
+    @classmethod
+    def validate_tensors(cls, v: Any) -> Tensor:
+        """Accept tensors, (possibly nested) lists/tuples, or their string
+        representations (e.g. "[[1.0, 1.0], [0.0, 1.0]]" or "1.0, 0.0") and
+        convert them into a double-precision tensor."""
+        if isinstance(v, Tensor):
+            return v
+        if isinstance(v, str):
+            stripped = v.strip()
+            if stripped.startswith("[") or stripped.startswith("("):
+                v = ast.literal_eval(stripped)
+            else:
+                v = [item for item in stripped.split(",")]
+        if isinstance(v, (list, tuple)):
+            float_list = cls._to_nested_floats(v)
+            return torch.tensor(float_list, dtype=torch.double)
+        raise ValueError(f"Cannot convert {v} to a Tensor.")
+
+    @classmethod
+    def _to_nested_floats(cls, v: Any) -> Any:
+        """Recursively convert a (possibly nested) list/tuple to floats,
+        preserving the nesting structure."""
+        if isinstance(v, (list, tuple)):
+            return [cls._to_nested_floats(item) for item in v]
+        return float(v)
+
+    @field_serializer("rmat_x", "rmat_y", "twiss0_x", "twiss0_y")
+    def serialize_tensor(self, v: Any) -> Any:
+        """Serialize tensor fields to nested lists so they round-trip through
+        JSON/YAML (pydantic otherwise dumps unknown types as ``'torch.Tensor'``)."""
+        if isinstance(v, Tensor):
+            return v.tolist()
+        return v
 
     @property
     def x_idx(self) -> int:
@@ -790,6 +827,7 @@ class EmittanceAlgorithm(Algorithm):
 
 
 class PathwiseMinimizeEmittance(EmittanceAlgorithm, PathwiseOptimization):
+    name: str = Field("pathwise_minimize_emittance", frozen=True)
     n_batch: PositiveInt = Field(
         1,
         description="Number of sample batches to optimize, with each batch containing self.n_samples",
