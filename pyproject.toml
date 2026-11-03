@@ -37,7 +37,9 @@ version_file = "bax_algorithms/_version.py"
 
 [project.optional-dependencies]
 dev = [
-    "pytest"
+    "pytest",
+    "nbformat",
+    "nbclient",
 ]
 
 [project.urls]
