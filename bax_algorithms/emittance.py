@@ -579,7 +579,7 @@ class EmittanceAlgorithm(Algorithm):
         returns:
             VirtualEmittanceMeasurementResult
         """
-        tuning_idxs = torch.arange(bounds.shape[1])
+        tuning_idxs = torch.arange(bounds.shape[1], device=bounds.device)
         tuning_idxs = tuning_idxs[
             tuning_idxs != self.meas_dim
         ]  # remove measurement dim index
@@ -658,7 +658,7 @@ class EmittanceAlgorithm(Algorithm):
 
         # expand the x tensor to represent quad measurement scans
         # at the locations in tuning parameter space specified by X
-        tkwargs = tkwargs if tkwargs else {"dtype": torch.double, "device": "cpu"}
+        tkwargs = {"dtype": x_tuning.dtype, "device": x_tuning.device, **(tkwargs or {})}
 
         x_meas = torch.linspace(
             *bounds.T[self.meas_dim], self.n_steps_measurement_param, **tkwargs
@@ -698,7 +698,7 @@ class EmittanceAlgorithm(Algorithm):
         """
         assert len(x_tuning.shape) in [2, 3]
         # x_tuning must be shape (n_tuning_configs, n_tuning_dims) or (n_samples, n_tuning_configs, ndim)
-        tkwargs = tkwargs if tkwargs else {"dtype": torch.double, "device": "cpu"}
+        tkwargs = {"dtype": x_tuning.dtype, "device": x_tuning.device, **(tkwargs or {})}
 
         x = self.get_meas_scan_inputs(
             x_tuning, bounds, tkwargs
@@ -726,7 +726,7 @@ class EmittanceAlgorithm(Algorithm):
             rmat = self.rmat_x.to(**tkwargs).repeat(
                 *bss.shape[:2], 1, 1
             )  # n_samples x n_tuning x 2 x 2
-            twiss0 = self.twiss0_x.repeat(*bss.shape[:2], 1)
+            twiss0 = self.twiss0_x.to(**tkwargs).repeat(*bss.shape[:2], 1)
         elif self.y_key and not self.x_key:
             k = -1 * bdes_to_kmod(self.energy, self.q_len, x[..., self.meas_dim])
             beamsize_squared = bss[
@@ -735,7 +735,7 @@ class EmittanceAlgorithm(Algorithm):
             rmat = self.rmat_y.to(**tkwargs).repeat(
                 *bss.shape[:2], 1, 1
             )  # n_samples x n_tuning x 2 x 2
-            twiss0 = self.twiss0_y.repeat(*bss.shape[:2], 1)
+            twiss0 = self.twiss0_y.to(**tkwargs).repeat(*bss.shape[:2], 1)
         else:
             k_x = bdes_to_kmod(self.energy, self.q_len, x[..., self.meas_dim])
             k_y = k_x * -1.0  # n_samples x n_tuning x n_steps
@@ -749,8 +749,8 @@ class EmittanceAlgorithm(Algorithm):
 
             twiss0 = torch.cat(
                 (
-                    self.twiss0_x.repeat(*bss.shape[:2], 1),
-                    self.twiss0_y.repeat(*bss.shape[:2], 1),
+                    self.twiss0_x.to(**tkwargs).repeat(*bss.shape[:2], 1),
+                    self.twiss0_y.to(**tkwargs).repeat(*bss.shape[:2], 1),
                 )
             )
 
@@ -759,17 +759,17 @@ class EmittanceAlgorithm(Algorithm):
 
         # compute emittance
         rv = compute_emit_bmag_quad_scan(
-            k.numpy(),
-            beamsize_squared.detach().numpy(),
+            k.detach().cpu().numpy(),
+            beamsize_squared.detach().cpu().numpy(),
             self.q_len,
-            rmat.numpy(),
-            twiss0.numpy(),
+            rmat.detach().cpu().numpy(),
+            twiss0.detach().cpu().numpy(),
             thin_lens=self.thin_lens,
             maxiter=self.maxiter_fit,
         )
 
-        emit = torch.from_numpy(rv["emittance"])
-        bmag = torch.from_numpy(rv["bmag"])
+        emit = torch.as_tensor(rv["emittance"], device=x_tuning.device, dtype=x_tuning.dtype)
+        bmag = torch.as_tensor(rv["bmag"], device=x_tuning.device, dtype=x_tuning.dtype)
         # emit.shape = (n_samples x n_tuning) or (2*n_samples x n_tuning) if optimizing both x and y
         # bmag.shape = (n_samples x n_tuning x nsteps) or (2*n_samples x n_tuning x nsteps) if optimizing both x and y
 
@@ -801,7 +801,7 @@ class EmittanceAlgorithm(Algorithm):
         self, beamsize_squared: Tensor, n_neighbors: int = 2
     ) -> Tensor:
         min_values, min_indices = torch.min(beamsize_squared, dim=-1, keepdim=True)
-        row_indices = torch.arange(beamsize_squared.shape[-1]).repeat(
+        row_indices = torch.arange(beamsize_squared.shape[-1], device=beamsize_squared.device).repeat(
             *beamsize_squared.shape[:-1], 1
         )
         mask_first_min = row_indices == min_indices
@@ -811,10 +811,10 @@ class EmittanceAlgorithm(Algorithm):
         for i in range(n_neighbors):
             # Create shifted copies
             x_left = torch.cat(
-                (x[..., 1:], torch.zeros(*x.shape[:-1], 1, dtype=torch.bool)), dim=-1
+                (x[..., 1:], torch.zeros(*x.shape[:-1], 1, dtype=torch.bool, device=x.device)), dim=-1
             )  # Shift left, add False at the end
             x_right = torch.cat(
-                (torch.zeros(*x.shape[:-1], 1, dtype=torch.bool), x[..., :-1]), dim=-1
+                (torch.zeros(*x.shape[:-1], 1, dtype=torch.bool, device=x.device), x[..., :-1]), dim=-1
             )  # Shift right, add False at the beginning
 
             # Perform boolean OR operation
@@ -898,6 +898,6 @@ class PathwiseMinimizeEmittance(EmittanceAlgorithm, PathwiseOptimization):
         """
         Get indeces specifying parameters for virtual objective optimization.
         """
-        idcs = torch.tensor(range(bounds.shape[1]))
+        idcs = torch.arange(bounds.shape[1], device=bounds.device)
         mask = idcs != self.meas_dim
         return idcs[mask]

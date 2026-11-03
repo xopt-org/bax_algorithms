@@ -29,7 +29,6 @@ dependencies = [
     "pydantic>=1.10.9",
     "scipy>=1.10.1",
     "xopt>=3.1.2",
-    "jupyterlab>=3",
 ]
 dynamic = ["version"]
 [tool.setuptools_scm]
@@ -40,6 +39,9 @@ dev = [
     "pytest",
     "nbformat",
     "nbclient",
+]
+notebook = [
+    "jupyterlab>=3"
 ]
 
 [project.urls]

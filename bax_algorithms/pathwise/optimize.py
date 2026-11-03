@@ -137,7 +137,7 @@ class DifferentialEvolution(VirtualOptimizer):
         else:
             ndim = bounds.shape[-1]
 
-        best_x = torch.from_numpy(res.x).reshape(n_samples, 1, ndim)
+        best_x = torch.as_tensor(res.x, device=bounds.device, dtype=bounds.dtype).reshape(n_samples, 1, ndim)
 
         return best_x
 
@@ -150,7 +150,7 @@ class DifferentialEvolution(VirtualOptimizer):
         optimization_indeces: Tensor,
     ) -> Callable:
         def wrapped_virtual_objective(x):
-            x = torch.from_numpy(x)
+            x = torch.as_tensor(x, device=bounds.device, dtype=bounds.dtype)
             # x.shape = num_params x popsize*num_params // num_params = dim*n_samples
             dim = int(x.shape[0] / n_samples)
             x = x.reshape(n_samples, dim, -1)
@@ -161,7 +161,7 @@ class DifferentialEvolution(VirtualOptimizer):
             else:
                 x_p = x
             res = virtual_objective(sample_functions_list, x_p, bounds)
-            res = res.sum(dim=0).detach().numpy()
+            res = res.sum(dim=0).detach().cpu().numpy()
             return res
 
         return wrapped_virtual_objective
@@ -173,6 +173,6 @@ class DifferentialEvolution(VirtualOptimizer):
         Get bounds for virtual optimization (may not be the same as bounds passed to optimizer).
         """
         if optimization_indeces is not None:
-            return np.tile(bounds[..., optimization_indeces].numpy().T, (n_samples, 1))
+            return np.tile(bounds[..., optimization_indeces].detach().cpu().numpy().T, (n_samples, 1))
         else:
-            return np.tile(bounds.numpy().T, (n_samples, 1))
+            return np.tile(bounds.detach().cpu().numpy().T, (n_samples, 1))
