@@ -658,7 +658,11 @@ class EmittanceAlgorithm(Algorithm):
 
         # expand the x tensor to represent quad measurement scans
         # at the locations in tuning parameter space specified by X
-        tkwargs = {"dtype": x_tuning.dtype, "device": x_tuning.device, **(tkwargs or {})}
+        tkwargs = {
+            "dtype": x_tuning.dtype,
+            "device": x_tuning.device,
+            **(tkwargs or {}),
+        }
 
         x_meas = torch.linspace(
             *bounds.T[self.meas_dim], self.n_steps_measurement_param, **tkwargs
@@ -698,7 +702,11 @@ class EmittanceAlgorithm(Algorithm):
         """
         assert len(x_tuning.shape) in [2, 3]
         # x_tuning must be shape (n_tuning_configs, n_tuning_dims) or (n_samples, n_tuning_configs, ndim)
-        tkwargs = {"dtype": x_tuning.dtype, "device": x_tuning.device, **(tkwargs or {})}
+        tkwargs = {
+            "dtype": x_tuning.dtype,
+            "device": x_tuning.device,
+            **(tkwargs or {}),
+        }
 
         x = self.get_meas_scan_inputs(
             x_tuning, bounds, tkwargs
@@ -768,7 +776,9 @@ class EmittanceAlgorithm(Algorithm):
             maxiter=self.maxiter_fit,
         )
 
-        emit = torch.as_tensor(rv["emittance"], device=x_tuning.device, dtype=x_tuning.dtype)
+        emit = torch.as_tensor(
+            rv["emittance"], device=x_tuning.device, dtype=x_tuning.dtype
+        )
         bmag = torch.as_tensor(rv["bmag"], device=x_tuning.device, dtype=x_tuning.dtype)
         # emit.shape = (n_samples x n_tuning) or (2*n_samples x n_tuning) if optimizing both x and y
         # bmag.shape = (n_samples x n_tuning x nsteps) or (2*n_samples x n_tuning x nsteps) if optimizing both x and y
@@ -801,9 +811,9 @@ class EmittanceAlgorithm(Algorithm):
         self, beamsize_squared: Tensor, n_neighbors: int = 2
     ) -> Tensor:
         min_values, min_indices = torch.min(beamsize_squared, dim=-1, keepdim=True)
-        row_indices = torch.arange(beamsize_squared.shape[-1], device=beamsize_squared.device).repeat(
-            *beamsize_squared.shape[:-1], 1
-        )
+        row_indices = torch.arange(
+            beamsize_squared.shape[-1], device=beamsize_squared.device
+        ).repeat(*beamsize_squared.shape[:-1], 1)
         mask_first_min = row_indices == min_indices
 
         # add each minimum's nearest neighbors to mask
@@ -811,10 +821,18 @@ class EmittanceAlgorithm(Algorithm):
         for i in range(n_neighbors):
             # Create shifted copies
             x_left = torch.cat(
-                (x[..., 1:], torch.zeros(*x.shape[:-1], 1, dtype=torch.bool, device=x.device)), dim=-1
+                (
+                    x[..., 1:],
+                    torch.zeros(*x.shape[:-1], 1, dtype=torch.bool, device=x.device),
+                ),
+                dim=-1,
             )  # Shift left, add False at the end
             x_right = torch.cat(
-                (torch.zeros(*x.shape[:-1], 1, dtype=torch.bool, device=x.device), x[..., :-1]), dim=-1
+                (
+                    torch.zeros(*x.shape[:-1], 1, dtype=torch.bool, device=x.device),
+                    x[..., :-1],
+                ),
+                dim=-1,
             )  # Shift right, add False at the beginning
 
             # Perform boolean OR operation

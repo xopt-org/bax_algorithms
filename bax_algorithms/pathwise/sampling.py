@@ -49,8 +49,12 @@ def draw_product_kernel_prior_paths(model, n_samples):
         model.covar_module.base_kernel.kernels[matern_idx].active_dims
     )
     # add assert matern
-    matern_covar_module.active_dims = torch.arange(len(matern_dims), device=model.train_inputs[0].device)
-    matern_covar_module = gpytorch.kernels.ScaleKernel(matern_covar_module).to(model.train_inputs[0])
+    matern_covar_module.active_dims = torch.arange(
+        len(matern_dims), device=model.train_inputs[0].device
+    )
+    matern_covar_module = gpytorch.kernels.ScaleKernel(matern_covar_module).to(
+        model.train_inputs[0]
+    )
     matern_covar_module.outputscale = copy.copy(model.covar_module.outputscale.detach())
 
     mean_module = gpytorch.means.ZeroMean().to(model.train_inputs[0])
@@ -66,9 +70,15 @@ def draw_product_kernel_prior_paths(model, n_samples):
 
     matern_model = SingleTaskGP(
         train_X=torch.tensor(
-            [[0.0] * (ndim - 1)], device=model.train_inputs[0].device, dtype=model.train_inputs[0].dtype
+            [[0.0] * (ndim - 1)],
+            device=model.train_inputs[0].device,
+            dtype=model.train_inputs[0].dtype,
         ),  # add index specification
-        train_Y=torch.zeros((1, 1), device=model.train_inputs[0].device, dtype=model.train_inputs[0].dtype),
+        train_Y=torch.zeros(
+            (1, 1),
+            device=model.train_inputs[0].device,
+            dtype=model.train_inputs[0].dtype,
+        ),
         likelihood=likelihood,
         mean_module=mean_module,
         covar_module=matern_covar_module,

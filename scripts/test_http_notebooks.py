@@ -18,10 +18,7 @@ def run_notebook(path: Path, timeout: int) -> tuple[bool, float]:
     ]
 
     total = len(code_cells)
-    position = {
-        index: number
-        for number, (index, _) in enumerate(code_cells, start=1)
-    }
+    position = {index: number for number, (index, _) in enumerate(code_cells, start=1)}
     started = {}
 
     print(f"\n{'=' * 72}", flush=True)
@@ -39,8 +36,7 @@ def run_notebook(path: Path, timeout: int) -> tuple[bool, float]:
         started[cell_index] = time.monotonic()
 
         print(
-            f"  [{position[cell_index]:02d}/{total:02d}] "
-            f"RUNNING: {description}",
+            f"  [{position[cell_index]:02d}/{total:02d}] RUNNING: {description}",
             flush=True,
         )
 
@@ -53,8 +49,7 @@ def run_notebook(path: Path, timeout: int) -> tuple[bool, float]:
         elapsed_text = f"{elapsed:.3f}s" if elapsed < 1.0 else f"{elapsed:.1f}s"
 
         print(
-            f"  [{position[cell_index]:02d}/{total:02d}] "
-            f"DONE ({elapsed_text})",
+            f"  [{position[cell_index]:02d}/{total:02d}] DONE ({elapsed_text})",
             flush=True,
         )
 
@@ -80,8 +75,7 @@ def run_notebook(path: Path, timeout: int) -> tuple[bool, float]:
     elapsed = time.monotonic() - start
 
     print(
-        f"\n{'PASS' if success else 'FAIL'}: "
-        f"{path.name} ({elapsed:.1f}s)",
+        f"\n{'PASS' if success else 'FAIL'}: {path.name} ({elapsed:.1f}s)",
         flush=True,
     )
 
@@ -108,10 +102,7 @@ def main():
     print("=" * 72)
 
     for name, success, elapsed in results:
-        print(
-            f"{'PASS' if success else 'FAIL':4s} "
-            f"{elapsed:7.1f}s  {name}"
-        )
+        print(f"{'PASS' if success else 'FAIL':4s} {elapsed:7.1f}s  {name}")
 
     return 0 if all(result[1] for result in results) else 1
 

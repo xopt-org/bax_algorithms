@@ -137,7 +137,9 @@ class DifferentialEvolution(VirtualOptimizer):
         else:
             ndim = bounds.shape[-1]
 
-        best_x = torch.as_tensor(res.x, device=bounds.device, dtype=bounds.dtype).reshape(n_samples, 1, ndim)
+        best_x = torch.as_tensor(
+            res.x, device=bounds.device, dtype=bounds.dtype
+        ).reshape(n_samples, 1, ndim)
 
         return best_x
 
@@ -173,6 +175,9 @@ class DifferentialEvolution(VirtualOptimizer):
         Get bounds for virtual optimization (may not be the same as bounds passed to optimizer).
         """
         if optimization_indeces is not None:
-            return np.tile(bounds[..., optimization_indeces].detach().cpu().numpy().T, (n_samples, 1))
+            return np.tile(
+                bounds[..., optimization_indeces].detach().cpu().numpy().T,
+                (n_samples, 1),
+            )
         else:
             return np.tile(bounds.detach().cpu().numpy().T, (n_samples, 1))
