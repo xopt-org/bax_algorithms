@@ -103,7 +103,7 @@ class PathwiseOptimization(Algorithm):
         """
         Get indeces specifying parameters for virtual objective optimization.
         """
-        return torch.tensor(range(bounds.shape[1]))
+        return torch.arange(bounds.shape[1], device=bounds.device)
 
     def evaluate_virtual_observables(
         self,

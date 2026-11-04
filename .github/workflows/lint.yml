@@ -22,7 +22,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --extra dev --extra notebook
 
       - name: Install pre-commit
         run: uv pip install pre-commit
@@ -34,7 +34,7 @@ jobs:
         env:
           RUFF_OUTPUT_FORMAT: github
         run: |
-          uv run pre-commit run jupyter-notebook-clear-output --all-files
+          uv run --extra notebook pre-commit run jupyter-notebook-clear-output --all-files
 
       - name: Switch to a temporary branch
         run: |
@@ -44,7 +44,7 @@ jobs:
         env:
           RUFF_OUTPUT_FORMAT: github
         run: |
-          uv run pre-commit run \
+          uv run --extra notebook pre-commit run \
             --show-diff-on-failure \
             --color=always \
             --all-files

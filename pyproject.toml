@@ -29,7 +29,6 @@ dependencies = [
     "pydantic>=1.10.9",
     "scipy>=1.10.1",
     "xopt>=3.1.2",
-    "jupyterlab>=3",
 ]
 dynamic = ["version"]
 [tool.setuptools_scm]
@@ -37,7 +36,12 @@ version_file = "bax_algorithms/_version.py"
 
 [project.optional-dependencies]
 dev = [
-    "pytest"
+    "pytest",
+    "nbformat",
+    "nbclient",
+]
+notebook = [
+    "jupyterlab>=3"
 ]
 
 [project.urls]
